@@ -322,6 +322,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   // 落とし穴：●の形。通路の上なら、どこにでも置ける
   var PIT_R = 0.75;          // 穴の大きさ（半径）
   var PIT_FALL = 0.55;       // 中心からこれより近くを通ると落ちる
+  var PIT_GAP = 6;           // 落とし穴どうしは、これ以上はなす
   function inPit(x, z) {
     for (var i = 0; i < state.pits.length; i++) {
       var p = state.pits[i]; if (p.used) continue;
@@ -336,7 +337,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     if (Math.hypot(x - tileX(START.x), z - tileZ(START.y)) < 3.5) return "スタートの近くには置けません";
     if (Math.hypot(x - tileX(EXIT.x), z - tileZ(EXIT.y)) < 3) return "出口の近くには置けません";
     for (var i = 0; i < KEY_TILES.length; i++) if (!state.keys[i] && Math.hypot(x - tileX(KEY_TILES[i].x), z - tileZ(KEY_TILES[i].y)) < 1.6) return "鍵の近くには置けません";
-    for (var j = 0; j < state.pits.length; j++) if (!state.pits[j].used && Math.hypot(x - state.pits[j].x, z - state.pits[j].z) < PIT_R * 2) return "ほかの落とし穴に近すぎます";
+    for (var j = 0; j < state.pits.length; j++) if (!state.pits[j].used && Math.hypot(x - state.pits[j].x, z - state.pits[j].z) < PIT_GAP) return "ほかの落とし穴に近すぎます（約" + PIT_GAP + "m はなしてください）";
     if (Math.hypot(x - state.player.x, z - state.player.z) < 1.5) return "VRの人の足もとには置けません";
     if (state.pits.filter(function (p) { return !p.used; }).length >= MAX_PITS) return "落とし穴は同時に" + MAX_PITS + "個までです";
     if (state.points < PIT_COST) return "ポイントが足りません（" + PIT_COST + "pt）";
@@ -693,6 +694,11 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
         edge.rotation.x = -Math.PI / 2; edge.position.set(p.x, 0.035, p.z); mark.add(edge);
         var icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: pitIconTex, depthTest: false, fog: false }));
         icon.scale.set(3.0, 3.0, 1); icon.position.set(p.x, 4.0, p.z); icon.renderOrder = 50; mark.add(icon);
+        var zone = new THREE.Mesh(new THREE.RingGeometry(PIT_GAP - 0.15, PIT_GAP, 48), new THREE.MeshBasicMaterial({ color: 0xd02020, transparent: true, opacity: 0.5, depthTest: false, depthWrite: false }));
+        zone.rotation.x = -Math.PI / 2; zone.position.set(p.x, 0.07, p.z); zone.renderOrder = 55;
+        var zoneFill = new THREE.Mesh(new THREE.CircleGeometry(PIT_GAP, 48), new THREE.MeshBasicMaterial({ color: 0xd02020, transparent: true, opacity: 0.12, depthTest: false, depthWrite: false }));
+        zoneFill.rotation.x = -Math.PI / 2; zoneFill.position.set(p.x, 0.065, p.z); zoneFill.renderOrder = 54;
+        var zoneG = new THREE.Group(); zoneG.add(zone); zoneG.add(zoneFill); zoneG.visible = false; mark.add(zoneG); mark.userData.zone = zoneG;
         mark.visible = role === "pc";
         g.add(mark);
         scene.add(g); pitMeshes[p.id] = { g: g, cover: cover, hole: hole, mark: mark };
@@ -1176,6 +1182,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     hoverMark.position.x = tileX(t.x); hoverMark.position.z = tileZ(t.y);
     // 落とし穴は、カーソルの所に●。置けない所では赤くなって、理由を出す
     pitCursor.visible = tool === "pit" && !!state && state.phase === "play";
+    for (var pid in pitMeshes) { var zz = pitMeshes[pid].mark.userData.zone; if (zz) zz.visible = tool === "pit"; }
     if (pitCursor.visible) {
       pitCursor.position.set(p.x, 0, p.z);
       var why = pitProblem(p.x, p.z);
@@ -1428,6 +1435,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     $("pcTime").textContent = "のこり " + Math.floor(tt / 60) + ":" + ((tt % 60) < 10 ? "0" : "") + (tt % 60);
     $("pcKeys").textContent = "鍵 " + state.keys.filter(Boolean).length + "/3";
     $("pcPts").textContent = "ポイント " + state.points + "（8秒に1・最大" + POINT_MAX + "）";
+    for (var pid2 in pitMeshes) { var z2 = pitMeshes[pid2].mark.userData.zone; if (z2) z2.visible = tool === "pit" && !pitMeshes[pid2].hole.visible; }
     $("pcPits").textContent = "落とし穴 " + state.pits.filter(function (q) { return !q.used; }).length + "/" + MAX_PITS;
     var hint = tool === "wall" ? "クリックした通路に、5秒で消える生け垣を立てます（1pt）"
       : tool === "pit" ? pcHintText
