@@ -106,7 +106,8 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     <h1>庭園の迷路</h1>
     <div class="hedge" aria-hidden="true"></div>
     <ul class="how">
-      <li><b>VR（にげる）</b><span>引き金を押している間、見ている方向へ歩く。鍵を3つ集めて、出口の門から出れば勝ち。</span></li>
+      <li><b>VR（にげる）</b><span>引き金を押している間、コントローラーを向けた方へ歩く。鍵を3つ集めて、出口の門から出れば勝ち。</span></li>
+      <li><b>酔いやすい人</b><span>タッチパッドの左右で30°ずつ向きを変え、上（まんなか）を押している間すすむ。下で後ろを向く。</span></li>
       <li><b>パソコン（じゃま）</b><span>にせの壁、落とし穴、ゴーレムでじゃまをする。5分たてば勝ち。</span></li>
       <li><b>やり直し</b><span>落とし穴に落ちる、ゴーレムにつかまると、スタートの空から落ちてくる（鍵はそのまま）。</span></li>
     </ul>
@@ -144,7 +145,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
       <button class="primary" id="btnEnterVR">VRに入る</button>
       <button id="btnEnterFlat">画面のまま</button>
     </div>
-    <p class="small">VR：見ている方向へ、引き金を押している間すすむ<br>画面のまま：ドラッグで見回す ・ 押しっぱなし（または W）で歩く</p>
+    <p class="small">VR：引き金を押している間、コントローラーを向けた方へすすむ<br>タッチパッド：左右で30°向きを変える ・ 上（まんなか）を押している間すすむ ・ 下で後ろを向く<br>画面のまま：ドラッグで見回す ・ 押しっぱなし（または W）で歩く ・ Q / E で30°向きを変える</p>
   </div>
 </div>
 
@@ -963,6 +964,37 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   // VR側：歩く
   // ================================================================
   var me = { x: 0, z: 0, y: EYE, respawnT: -1 };
+  // 酔いやすい人向け：タッチパッドで向きを変える・すすむ
+  var padForward = false, snapYaw = 0, snapCool = 0, padWasDown = false, snapFlash = 0;
+  function snapTurn(a) {
+    if (snapCool > 0) return;
+    snapYaw += a; snapCool = 0.25; snapFlash = 0.12;
+    noise(0.08, 900, 0.05, "bandpass");
+  }
+  function pollPad(dt) {
+    padForward = false;
+    var session = renderer.xr.getSession();
+    if (!session) return;
+    for (var i = 0; i < session.inputSources.length; i++) {
+      var gp = session.inputSources[i].gamepad;
+      if (!gp) continue;
+      // 引き金（0番）以外のボタンが押されていたら、タッチパッドの押しこみとみなす
+      var down = false;
+      for (var b = 1; b < gp.buttons.length; b++) if (gp.buttons[b] && gp.buttons[b].pressed) down = true;
+      // さわっている位置（いちばん大きく動いている軸の組）
+      var ax = 0, ay = 0;
+      for (var a = 0; a + 1 < gp.axes.length; a += 2) {
+        if (Math.abs(gp.axes[a]) + Math.abs(gp.axes[a + 1]) > Math.abs(ax) + Math.abs(ay)) { ax = gp.axes[a]; ay = gp.axes[a + 1]; }
+      }
+      if (!down) continue;
+      if (Math.abs(ax) > 0.45 && Math.abs(ax) > Math.abs(ay)) { if (!padWasDown) snapTurn(ax < 0 ? Math.PI / 6 : -Math.PI / 6); }
+      else if (ay > 0.55) { if (!padWasDown) snapTurn(Math.PI); }
+      else padForward = true;                 // 上、またはまんなか：すすむ
+      padWasDown = true;
+      return;
+    }
+    padWasDown = false;
+  }
   // 手もとの時計の画面（コントローラーに付ける前に作っておく）
   var watchCanvas = document.createElement("canvas"); watchCanvas.width = 256; watchCanvas.height = 160;
   var watchTex = new THREE.CanvasTexture(watchCanvas);
@@ -1000,7 +1032,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
       return yaw;
     }
     var playing = role === "solo" ? state.phase === "play" : remote.phase === "play";
-    if (walking && playing) {
+    if ((walking || padForward) && playing) {
       var p = { x: me.x - Math.sin(yaw) * WALK * dt, z: me.z - Math.cos(yaw) * WALK * dt };
       collide(p, PLAYER_R);
       me.x = p.x; me.z = p.z;
@@ -1079,6 +1111,11 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     }
   });
   window.addEventListener("keyup", function (e) { keys[e.code] = false; });
+  window.addEventListener("keydown", function (e) {
+    if (role !== "vr" && role !== "solo") return;
+    if (e.code === "KeyQ") snapTurn(Math.PI / 6);
+    if (e.code === "KeyE") snapTurn(-Math.PI / 6);
+  });
 
   // ================================================================
   // パソコン側：上から見る、じゃまをする
@@ -1233,6 +1270,11 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
         walking = (dragging && moved < 8 && holdT > 0.15) || keys.KeyW || keys.ArrowUp;
         if (dragging) holdT += dt;
       }
+      if (inXR) pollPad(dt);
+      if (snapCool > 0) snapCool -= dt;
+      rig.rotation.y = snapYaw;
+      // 向きを変えた一瞬だけ、少し暗くする（酔いにくくするため）
+      if (snapFlash > 0) { snapFlash = Math.max(0, snapFlash - dt); if (me.respawnT < 0) fade.material.opacity = snapFlash / 0.12 * 0.6; }
       var yaw = vrMove(dt, now);
       var sx = 0, sz = 0;
       if (shakeT > 0) { shakeT -= dt; sx = (Math.random() - 0.5) * shakeT * 0.15; sz = (Math.random() - 0.5) * shakeT * 0.15; }
