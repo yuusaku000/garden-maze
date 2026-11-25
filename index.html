@@ -168,7 +168,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   var GAME_TIME = 300;
   var START_POINTS = 3, POINT_EVERY = 8, POINT_MAX = 10;
   var WALL_COST = 1, PIT_COST = 2, FAKE_LIFE = 5, MAX_PITS = 4;
-  var GOLEM_COOL = 10, GOLEM_STUN = 2, GOLEM_LOSE = 3;
+  var GOLEM_COOL = 25, GOLEM_STUN = 2, GOLEM_LOSE = 3;
   var PREFIX = "yu-gardenmaze-";
   var NET_RATE = 1 / 15;
 
@@ -667,6 +667,11 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     for (var i = 0; i < 6; i++) { g.beginPath(); var x = 64, y = 64; g.moveTo(x, y); for (var k = 0; k < 4; k++) { x += rand(-22, 22); y += rand(-22, 22); g.lineTo(x, y); } g.stroke(); }
     g.fillStyle = "rgba(120,110,90,0.12)"; g.fillRect(0, 0, 128, 128);
   });
+  var pitIconTex = canvasTex(128, 128, function (g) {
+    g.fillStyle = "#ff6a10"; g.beginPath(); g.moveTo(64, 8); g.lineTo(122, 116); g.lineTo(6, 116); g.closePath(); g.fill();
+    g.strokeStyle = "#fff"; g.lineWidth = 6; g.stroke();
+    g.fillStyle = "#fff"; g.font = "bold 70px sans-serif"; g.textAlign = "center"; g.fillText("!", 64, 104);
+  });
   function syncPits(list) {
     var alive = {};
     list.forEach(function (p) {
@@ -679,10 +684,20 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
         cover.rotation.x = -Math.PI / 2; cover.position.set((r.x0 + r.x1) / 2, 0.012, (r.z0 + r.z1) / 2); g.add(cover);
         var hole = new THREE.Mesh(new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0), new THREE.MeshBasicMaterial({ color: 0x0a0806 }));
         hole.rotation.x = -Math.PI / 2; hole.position.set((r.x0 + r.x1) / 2, 0.014, (r.z0 + r.z1) / 2); hole.visible = false; g.add(hole);
-        scene.add(g); pitMeshes[p.id] = { g: g, cover: cover, hole: hole };
+        // パソコン側だけに見える印：オレンジのふちどりと「！」
+        var mark = new THREE.Group();
+        var fillM = new THREE.Mesh(new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.75, depthWrite: false }));
+        fillM.rotation.x = -Math.PI / 2; fillM.position.set((r.x0 + r.x1) / 2, 0.03, (r.z0 + r.z1) / 2); mark.add(fillM);
+        var edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0)), new THREE.LineBasicMaterial({ color: 0xff5a00 }));
+        edge.rotation.x = -Math.PI / 2; edge.position.set((r.x0 + r.x1) / 2, 0.04, (r.z0 + r.z1) / 2); mark.add(edge);
+        var icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: pitIconTex, depthTest: false, fog: false }));
+        icon.scale.set(3.6, 3.6, 1); icon.position.set((r.x0 + r.x1) / 2, 4.5, (r.z0 + r.z1) / 2); icon.renderOrder = 50; mark.add(icon);
+        mark.visible = role === "pc";
+        g.add(mark);
+        scene.add(g); pitMeshes[p.id] = { g: g, cover: cover, hole: hole, mark: mark };
       }
       var pm = pitMeshes[p.id];
-      if (p.used) { pm.cover.visible = false; pm.hole.visible = true; }
+      if (p.used) { pm.cover.visible = false; pm.hole.visible = true; pm.mark.visible = false; }
     });
     for (var id in pitMeshes) if (!alive[id]) { scene.remove(pitMeshes[id].g); delete pitMeshes[id]; }
   }
