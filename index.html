@@ -157,12 +157,12 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   // ================================================================
   // 決まりごと
   // ================================================================
-  var N = 17;                 // 迷路のマスの数（たて・よこ）
+  var N = 25;                 // 迷路のマスの数（たて・よこ）
   var T = 2.8;                // 1マスの大きさ（m）
   var WALL_H = 3.2;           // 生け垣の高さ
   var EYE = 1.6;
   var PLAYER_R = 0.75;        // 壁にこれ以上近づかない
-  var WALK = 2.6;             // 歩く速さ
+  var WALK = 3.0;             // 歩く速さ
   var GOLEM_SPEED = 1.6;      // ゴーレムはプレイヤーより遅い
   var GAME_TIME = 180;
   var START_POINTS = 3, POINT_EVERY = 8, POINT_MAX = 10;
@@ -196,13 +196,22 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
       g[cy + d[1] / 2][cx + d[0] / 2] = 0; g[cy + d[1]][cx + d[0]] = 0;
       stack.push([cx + d[0], cy + d[1]]);
     }
-    // ところどころ壁をぬいて、回り道を作る（にせの壁で完全にふさがれないように）
-    for (var k = 0; k < 18; k++) {
-      var wx = 1 + Math.floor(R() * (N - 2)), wy = 1 + Math.floor(R() * (N - 2));
+    // 壁をたくさんぬいて、行き方がいくつもある迷路にする（1本道で通せんぼされにくく）
+    for (var wy = 1; wy < N - 1; wy++) for (var wx = 1; wx < N - 1; wx++) {
       if (g[wy][wx] !== 1) continue;
       var h = g[wy][wx - 1] === 0 && g[wy][wx + 1] === 0 && g[wy - 1][wx] === 1 && g[wy + 1][wx] === 1;
       var v = g[wy - 1][wx] === 0 && g[wy + 1][wx] === 0 && g[wy][wx - 1] === 1 && g[wy][wx + 1] === 1;
-      if (h || v) g[wy][wx] = 0;
+      if ((h || v) && R() < 0.24) g[wy][wx] = 0;
+    }
+    // 行き止まりも半分くらい、となりの道につなげる
+    for (var dy2 = 1; dy2 < N - 1; dy2 += 2) for (var dx2 = 1; dx2 < N - 1; dx2 += 2) {
+      var open0 = (g[dy2][dx2 - 1] === 0) + (g[dy2][dx2 + 1] === 0) + (g[dy2 - 1][dx2] === 0) + (g[dy2 + 1][dx2] === 0);
+      if (open0 !== 1 || R() < 0.5) continue;
+      var opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(function (o) {
+        var wx2 = dx2 + o[0], wy2 = dy2 + o[1], nx2 = dx2 + o[0] * 2, ny2 = dy2 + o[1] * 2;
+        return nx2 > 0 && ny2 > 0 && nx2 < N - 1 && ny2 < N - 1 && g[wy2][wx2] === 1;
+      });
+      if (opts.length) { var o2 = opts[Math.floor(R() * opts.length)]; g[dy2 + o2[1]][dx2 + o2[0]] = 0; }
     }
     // スタートは左上、出口は右下の外がわ
     var st = { x: 1, y: 1 }, ex = { x: N - 2, y: N - 1 };
@@ -213,14 +222,14 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     for (var yy = 1; yy < N - 1; yy++) for (var xx = 1; xx < N - 1; xx++) {
       if (g[yy][xx] !== 0) continue;
       var open = (g[yy][xx - 1] === 0) + (g[yy][xx + 1] === 0) + (g[yy - 1][xx] === 0) + (g[yy + 1][xx] === 0);
-      if (open === 1 && dist[yy][xx] > 8) cands.push({ x: xx, y: yy, d: dist[yy][xx] });
+      if (open <= 2 && dist[yy][xx] > 10) cands.push({ x: xx, y: yy, d: dist[yy][xx] });
     }
     var maxD = 0; cands.forEach(function (c) { maxD = Math.max(maxD, c.d); });
     cands = cands.filter(function (c) { return c.d <= maxD * 0.8; });
     cands.sort(function (a, b) { return b.d - a.d; });
     var keys = [];
     for (var i = 0; i < cands.length && keys.length < 3; i++) {
-      var ok = keys.every(function (q) { return Math.abs(q.x - cands[i].x) + Math.abs(q.y - cands[i].y) > 6; });
+      var ok = keys.every(function (q) { return Math.abs(q.x - cands[i].x) + Math.abs(q.y - cands[i].y) > 10; });
       if (ok && !(cands[i].x === ex.x && cands[i].y === ex.y - 1)) keys.push(cands[i]);
     }
     // 行き止まりが足りないときは、ほかの通路からも選ぶ（必ず3つ置く）
@@ -677,6 +686,30 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     for (var id in pitMeshes) if (!alive[id]) { scene.remove(pitMeshes[id].g); delete pitMeshes[id]; }
   }
 
+  // ===== 歩いたあとの線（床に残る） =====
+  var TRAIL_MAX = 5000, trailSegs = 0, trailLast = null;
+  var trailPos = new Float32Array(TRAIL_MAX * 6 * 3);
+  var trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute("position", new THREE.BufferAttribute(trailPos, 3));
+  trailGeo.setDrawRange(0, 0);
+  var trail = new THREE.Mesh(trailGeo, new THREE.MeshBasicMaterial({ color: 0xff5a8a, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  trail.frustumCulled = false; trail.renderOrder = 2; scene.add(trail);
+  function trailReset() { trailSegs = 0; trailLast = null; trailGeo.setDrawRange(0, 0); }
+  function trailBreak() { trailLast = null; }
+  function trailAdd(x, z) {
+    if (!trailLast) { trailLast = { x: x, z: z }; return; }
+    var dx = x - trailLast.x, dz = z - trailLast.z, d = Math.sqrt(dx * dx + dz * dz);
+    if (d < 0.3) return;
+    if (d > 2.5 || trailSegs >= TRAIL_MAX) { trailLast = { x: x, z: z }; return; }
+    var w = 0.16, nx = -dz / d * w, nz = dx / d * w, y = 0.025, i = trailSegs * 18;
+    var a = [trailLast.x + nx, y, trailLast.z + nz], b = [trailLast.x - nx, y, trailLast.z - nz], c = [x + nx, y, z + nz], e = [x - nx, y, z - nz];
+    [a, b, c, c, b, e].forEach(function (v, k) { trailPos[i + k * 3] = v[0]; trailPos[i + k * 3 + 1] = v[1]; trailPos[i + k * 3 + 2] = v[2]; });
+    trailSegs++;
+    trailGeo.setDrawRange(0, trailSegs * 6);
+    trailGeo.attributes.position.needsUpdate = true;
+    trailLast = { x: x, z: z };
+  }
+
   // ===== ゴーレム =====
   var golem = new THREE.Group();
   (function () {
@@ -898,6 +931,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
       if (ev.reason === "golem") playCaught();
     } else if (ev.t === "fall") { playFall(); }
     else if (ev.t === "start") {
+      trailReset();
       hideEnd();
       if (role === "vr") { makeMaze(ev.seed); buildMaze(); }
       if (role !== "vr") buildMaze();
@@ -915,6 +949,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   // VR側：歩く
   // ================================================================
   var me = { x: 0, z: 0, y: EYE, respawnT: -1 };
+  var activeCtrl = null;
   var walking = false, flatYaw = Math.PI, flatPitch = -0.05, shakeT = 0;
   function localPlayerToStart() { me.x = tileX(START.x); me.z = tileZ(START.y); me.y = EYE; flatYaw = startYaw(); }
   function startYaw() {
@@ -927,8 +962,11 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   }
   function vrMove(dt, now) {
     var yaw;
-    var q = new THREE.Quaternion(); camera.getWorldQuaternion(q);
-    yaw = new THREE.Euler().setFromQuaternion(q, "YXZ").y;
+    var q = new THREE.Quaternion();
+    if (renderer.xr.isPresenting && activeCtrl) activeCtrl.getWorldQuaternion(q);   // コントローラーを向けた方へ
+    else camera.getWorldQuaternion(q);                                              // 画面のままのときは、見ている方へ
+    var fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+    yaw = Math.atan2(-fwd.x, -fwd.z);
     // やり直し中：落ちる → 空から、ふわっと降りてくる
     if (me.respawnT >= 0) {
       me.respawnT += dt;
@@ -955,7 +993,8 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   }
   for (var ci = 0; ci < 2; ci++) {
     (function (ctrl) {
-      ctrl.addEventListener("selectstart", function () { startAudio(); walking = true; holdT = 0; });
+      ctrl.addEventListener("connected", function () { activeCtrl = ctrl; });
+      ctrl.addEventListener("selectstart", function () { activeCtrl = ctrl; startAudio(); walking = true; holdT = 0; });
       ctrl.addEventListener("selectend", function () { walking = false; });
       rig.add(ctrl);
       ctrl.add(wand());
@@ -1210,6 +1249,14 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
       syncPits(remote.pits);
     }
 
+    // 歩いたあとの線
+    if (role) {
+      var tp = null;
+      if (vrSide) { if (me.respawnT < 0) tp = me; }
+      else if (state && state.player.respawn <= 0) tp = state.player;
+      var playingNow = vrSide && role === "vr" ? remote.phase === "play" : (state && state.phase === "play");
+      if (tp && playingNow) trailAdd(tp.x, tp.z); else trailBreak();
+    }
     // ゴーレムを画面に
     var G = role === "vr" ? remote.golem : (state ? state.golem : null);
     if (G) {
