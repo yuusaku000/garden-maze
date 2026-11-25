@@ -1,0 +1,1357 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>庭園の迷路</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+<style>
+/* 1画面のゲーム。明るい昼の庭園に、白いカードを重ねる。見た目は昼の庭で固定。 */
+:root {
+  --sky: #bfe3f5;
+  --card: rgba(255, 253, 246, 0.95);
+  --ink: #233024;
+  --dim: #5d6b5c;
+  --leaf: #3f8a3a;
+  --gold: #e0a820;
+  --stone: #d8d0c0;
+  --line: rgba(35, 48, 36, 0.14);
+  --font-display: "Dela Gothic One", "Hiragino Kaku Gothic StdN", "Yu Gothic", sans-serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--sky); color: var(--ink); font-family: var(--font-body); overflow: hidden; }
+canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#overlay {
+  position: fixed; inset: 0; display: flex; align-items: flex-start; justify-content: center; overflow: auto;
+  padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: linear-gradient(180deg, rgba(191,227,245,0.25), rgba(63,138,58,0.35));
+}
+.card {
+  width: 100%; max-width: 32rem; margin: auto 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 1.4rem 1.4rem 1.2rem; display: flex; flex-direction: column; gap: 0.8rem; box-shadow: 0 8px 30px rgba(35,48,36,0.15);
+}
+.eyebrow { margin: 0; font-size: 0.74rem; letter-spacing: 0.2em; color: var(--dim); }
+h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(2.1rem, 8vw, 2.8rem); line-height: 1.05; margin: 0; color: var(--leaf); text-wrap: balance; }
+.hedge { height: 12px; border-radius: 6px; background: repeating-linear-gradient(90deg, #3f8a3a 0 14px, #4f9a46 14px 28px); }
+.how { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.4rem; font-size: 0.9rem; line-height: 1.55; }
+.how li { display: grid; grid-template-columns: 5.6rem 1fr; gap: 0.6rem; }
+.how b { color: var(--leaf); }
+.buttons { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+button {
+  font: inherit; font-weight: 700; font-size: 1.02rem; padding: 0.8rem 1rem; border-radius: 6px; cursor: pointer;
+  border: 2px solid var(--leaf); color: var(--ink); background: #fff; flex: 1 1 9rem; min-height: 3.1rem;
+}
+button.primary { background: var(--leaf); color: #fff; }
+.card > button { flex: none; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.small, #note { margin: 0; font-size: 0.82rem; color: var(--dim); line-height: 1.6; }
+#code { font-family: var(--font-display); font-size: 3.2rem; letter-spacing: 0.3em; text-align: center; color: var(--leaf); }
+#codeInput { font: inherit; font-size: 2.1rem; font-weight: 800; letter-spacing: 0.3em; text-align: center; width: 100%; box-sizing: border-box; padding: 0.35rem; border-radius: 6px; border: 2px solid var(--line); background: #fff; color: var(--ink); }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+.keypad button { font-size: 1.4rem; min-height: 2.8rem; padding: 0.3rem; flex: none; }
+#status { font-weight: 700; color: var(--leaf); margin: 0; }
+#btnBack {
+  position: fixed; z-index: 20; flex: none; min-height: 0; font-size: 0.85rem; padding: 0.45rem 0.8rem;
+  top: max(10px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px));
+}
+/* パソコン側の画面 */
+#pcHud { position: fixed; inset: 0; pointer-events: none; }
+#pcTop {
+  position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;
+  padding-top: max(10px, env(safe-area-inset-top, 0px));
+  padding-left: calc(max(16px, env(safe-area-inset-left, 0px)) + 10rem); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.chip { background: rgba(255,253,246,0.92); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.7rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+#pcBottom {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.tool { pointer-events: auto; flex: none; min-height: 0; padding: 0.5rem 0.8rem; font-size: 0.92rem; }
+.tool[aria-pressed="true"] { background: var(--leaf); color: #fff; }
+#endMsg { position: fixed; left: 0; right: 0; top: 36%; text-align: center; font-family: var(--font-display); font-size: clamp(2rem, 7vw, 3.4rem); pointer-events: none; text-shadow: 0 2px 12px rgba(255,255,255,0.9); }
+#flatHint { position: fixed; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom, 0px)); text-align: center; color: var(--ink); font-size: 0.85rem; pointer-events: none; text-shadow: 0 1px 4px #fff; margin: 0; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<button id="btnBack" hidden>← メニューに戻る</button>
+
+<div id="pcHud" hidden>
+  <div id="pcTop">
+    <div class="chip" id="pcTime">のこり 3:00</div>
+    <div class="chip" id="pcKeys">鍵 0/3</div>
+    <div class="chip" id="pcPts">ポイント 3</div>
+    <div class="chip" id="pcGolem">ゴーレム OK</div>
+  </div>
+  <div id="pcBottom">
+    <button class="tool" data-tool="wall" aria-pressed="true">1 にせの壁（1pt・5秒）</button>
+    <button class="tool" data-tool="pit" aria-pressed="false">2 落とし穴（2pt）</button>
+    <button class="tool" data-tool="golem" aria-pressed="false">3 ゴーレム（ドラッグして、はなすと落ちる）</button>
+  </div>
+</div>
+<div id="endMsg" hidden></div>
+<p id="flatHint" hidden></p>
+
+<div id="overlay">
+  <div class="card" id="cardMain">
+    <p class="eyebrow">VR 対 パソコン ・ 制限時間 3分</p>
+    <h1>庭園の迷路</h1>
+    <div class="hedge" aria-hidden="true"></div>
+    <ul class="how">
+      <li><b>VR（にげる）</b><span>引き金を押している間、見ている方向へ歩く。鍵を3つ集めて、出口の門から出れば勝ち。</span></li>
+      <li><b>パソコン（じゃま）</b><span>にせの壁、落とし穴、ゴーレムでじゃまをする。3分たてば勝ち。</span></li>
+      <li><b>やり直し</b><span>落とし穴に落ちる、ゴーレムにつかまると、スタートの空から落ちてくる（鍵はそのまま）。</span></li>
+    </ul>
+    <div class="buttons">
+      <button class="primary" id="btnRolePC">パソコン（じゃま）</button>
+      <button id="btnRoleVR">VR（にげる）</button>
+    </div>
+    <button id="btnSolo">VR でひとりで（CPUがじゃまする）</button>
+    <button id="btnPcSolo">パソコンでひとりで（CPUが迷路を進む）</button>
+    <p id="note">VRが使えるか調べています…</p>
+  </div>
+
+  <div class="card" id="cardHost" hidden>
+    <p class="eyebrow">パソコン（じゃまする側）</p>
+    <p>この合言葉を、VRのほうに入れてください。</p>
+    <div id="code">----</div>
+    <p id="status">つなぐ準備をしています…</p>
+    <button class="primary" id="btnStart" disabled>スタート</button>
+    <p class="small">操作：1/2 を選んで迷路をクリック ・ 3 を選んでゴーレムをドラッグ、はなすと落ちる ・ 終わったら Enter でもう一度</p>
+  </div>
+
+  <div class="card" id="cardJoin" hidden>
+    <p class="eyebrow">VR（にげる側）</p>
+    <p>パソコンに出ている4けたの合言葉を入れてください。</p>
+    <input id="codeInput" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="合言葉">
+    <button class="primary" id="btnConnect">つなぐ</button>
+    <p id="status2" class="small">4けた入れると、自動でつなぎます。</p>
+    <div class="keypad" id="keypad"></div>
+  </div>
+
+  <div class="card" id="cardEnter" hidden>
+    <p class="eyebrow" id="enterEyebrow">準備ができました</p>
+    <p id="enterText">VRに入って、パソコンの人のスタートを待ってください。</p>
+    <div class="buttons">
+      <button class="primary" id="btnEnterVR">VRに入る</button>
+      <button id="btnEnterFlat">画面のまま</button>
+    </div>
+    <p class="small">VR：見ている方向へ、引き金を押している間すすむ<br>画面のまま：ドラッグで見回す ・ 押しっぱなし（または W）で歩く</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.3.2/dist/peerjs.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ================================================================
+  // 決まりごと
+  // ================================================================
+  var N = 17;                 // 迷路のマスの数（たて・よこ）
+  var T = 2.8;                // 1マスの大きさ（m）
+  var WALL_H = 3.2;           // 生け垣の高さ
+  var EYE = 1.6;
+  var PLAYER_R = 0.75;        // 壁にこれ以上近づかない
+  var WALK = 2.6;             // 歩く速さ
+  var GOLEM_SPEED = 1.6;      // ゴーレムはプレイヤーより遅い
+  var GAME_TIME = 180;
+  var START_POINTS = 3, POINT_EVERY = 8, POINT_MAX = 10;
+  var WALL_COST = 1, PIT_COST = 2, FAKE_LIFE = 5, MAX_PITS = 4;
+  var GOLEM_COOL = 10, GOLEM_STUN = 2, GOLEM_LOSE = 3;
+  var PREFIX = "yu-gardenmaze-";
+  var NET_RATE = 1 / 15;
+
+  var canvas = document.getElementById("view");
+  function $(id) { return document.getElementById(id); }
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function angDiff(a, b) { var d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
+  function mulberry(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // ================================================================
+  // 迷路を作る（合言葉の画面で決めた数字から、両方で同じ迷路を作る）
+  // ================================================================
+  var grid = null, START = null, EXIT = null, KEY_TILES = [];
+  function makeMaze(seed) {
+    var R = mulberry(seed);
+    var g = [];
+    for (var y = 0; y < N; y++) { g.push([]); for (var x = 0; x < N; x++) g[y].push(1); }
+    // 穴を掘って道を作る
+    var stack = [[1, 1]]; g[1][1] = 0;
+    while (stack.length) {
+      var c = stack[stack.length - 1], cx = c[0], cy = c[1];
+      var dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]].filter(function (d) { var nx = cx + d[0], ny = cy + d[1]; return nx > 0 && ny > 0 && nx < N - 1 && ny < N - 1 && g[ny][nx] === 1; });
+      if (!dirs.length) { stack.pop(); continue; }
+      var d = dirs[Math.floor(R() * dirs.length)];
+      g[cy + d[1] / 2][cx + d[0] / 2] = 0; g[cy + d[1]][cx + d[0]] = 0;
+      stack.push([cx + d[0], cy + d[1]]);
+    }
+    // ところどころ壁をぬいて、回り道を作る（にせの壁で完全にふさがれないように）
+    for (var k = 0; k < 18; k++) {
+      var wx = 1 + Math.floor(R() * (N - 2)), wy = 1 + Math.floor(R() * (N - 2));
+      if (g[wy][wx] !== 1) continue;
+      var h = g[wy][wx - 1] === 0 && g[wy][wx + 1] === 0 && g[wy - 1][wx] === 1 && g[wy + 1][wx] === 1;
+      var v = g[wy - 1][wx] === 0 && g[wy + 1][wx] === 0 && g[wy][wx - 1] === 1 && g[wy][wx + 1] === 1;
+      if (h || v) g[wy][wx] = 0;
+    }
+    // スタートは左上、出口は右下の外がわ
+    var st = { x: 1, y: 1 }, ex = { x: N - 2, y: N - 1 };
+    g[N - 1][N - 2] = 0;
+    // 鍵：スタートから遠い、行き止まりの近くに3つ
+    var dist = bfs(g, st.x, st.y, null);
+    var cands = [];
+    for (var yy = 1; yy < N - 1; yy++) for (var xx = 1; xx < N - 1; xx++) {
+      if (g[yy][xx] !== 0) continue;
+      var open = (g[yy][xx - 1] === 0) + (g[yy][xx + 1] === 0) + (g[yy - 1][xx] === 0) + (g[yy + 1][xx] === 0);
+      if (open === 1 && dist[yy][xx] > 8) cands.push({ x: xx, y: yy, d: dist[yy][xx] });
+    }
+    var maxD = 0; cands.forEach(function (c) { maxD = Math.max(maxD, c.d); });
+    cands = cands.filter(function (c) { return c.d <= maxD * 0.8; });
+    cands.sort(function (a, b) { return b.d - a.d; });
+    var keys = [];
+    for (var i = 0; i < cands.length && keys.length < 3; i++) {
+      var ok = keys.every(function (q) { return Math.abs(q.x - cands[i].x) + Math.abs(q.y - cands[i].y) > 6; });
+      if (ok && !(cands[i].x === ex.x && cands[i].y === ex.y - 1)) keys.push(cands[i]);
+    }
+    // 行き止まりが足りないときは、ほかの通路からも選ぶ（必ず3つ置く）
+    if (keys.length < 3) {
+      var all = [];
+      for (var y3 = 1; y3 < N - 1; y3++) for (var x3 = 1; x3 < N - 1; x3++) if (g[y3][x3] === 0 && dist[y3][x3] > 6) all.push({ x: x3, y: y3, d: dist[y3][x3] });
+      all.sort(function (a, b) { return b.d - a.d; });
+      for (var j = 0; j < all.length && keys.length < 3; j++) {
+        var ok2 = keys.every(function (q) { return Math.abs(q.x - all[j].x) + Math.abs(q.y - all[j].y) > 5; });
+        if (ok2 && !(all[j].x === ex.x)) keys.push(all[j]);
+      }
+      for (var j2 = 0; j2 < all.length && keys.length < 3; j2++) if (keys.indexOf(all[j2]) < 0) keys.push(all[j2]);
+    }
+    grid = g; START = st; EXIT = ex; KEY_TILES = keys;
+  }
+  function bfs(g, sx, sy, blocked) {
+    var d = [];
+    for (var y = 0; y < N; y++) { d.push([]); for (var x = 0; x < N; x++) d[y].push(-1); }
+    var q = [[sx, sy]]; d[sy][sx] = 0;
+    while (q.length) {
+      var c = q.shift();
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (o) {
+        var nx = c[0] + o[0], ny = c[1] + o[1];
+        if (nx < 0 || ny < 0 || nx >= N || ny >= N) return;
+        if (g[ny][nx] !== 0 || d[ny][nx] >= 0) return;
+        if (blocked && blocked(nx, ny)) return;
+        d[ny][nx] = d[c[1]][c[0]] + 1; q.push([nx, ny]);
+      });
+    }
+    return d;
+  }
+  function tileX(tx) { return (tx - (N - 1) / 2) * T; }
+  function tileZ(ty) { return (ty - (N - 1) / 2) * T; }
+  function toTile(x, z) { return { x: Math.round(x / T + (N - 1) / 2), y: Math.round(z / T + (N - 1) / 2) }; }
+
+  // ================================================================
+  // ゲームの状態（パソコン側、またはひとり用で計算する）
+  // ================================================================
+  var state = null;   // { phase, time, keys[], points, pointT, fakes[], pits[], golem{}, player{} }
+  function newState(seed) {
+    return {
+      seed: seed, phase: "lobby", time: GAME_TIME, keys: [false, false, false], points: START_POINTS, pointT: 0,
+      fakes: [], pits: [], winner: "",
+      golem: { mode: "home", x: 0, z: 0, y: 30, cool: 0, stun: 0, lost: 0, path: null, pathT: 0 },
+      player: { x: tileX(1), z: tileZ(1), yaw: 0, respawn: 0 },
+      events: []
+    };
+  }
+  // VRの人（つながっている側）は、パソコンから届いた鍵とにせの壁を使う
+  function curKeys() { return role === "vr" ? remote.keys : (state ? state.keys : [false, false, false]); }
+  function curFakes() {
+    if (role === "vr") return (remote.fakes || []).map(function (a) { return { x: a[0], y: a[1] }; });
+    return state ? state.fakes : [];
+  }
+  function solidAt(tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= N || ty >= N) return true;
+    if (grid[ty][tx] === 1) return true;
+    if (tx === EXIT.x && ty === EXIT.y && !curKeys().every(Boolean)) return true;   // 門は鍵がそろうまで閉まっている
+    var fk = curFakes();
+    for (var i = 0; i < fk.length; i++) if (fk[i].x === tx && fk[i].y === ty) return true;
+    return false;
+  }
+  // 円が壁にめりこまないように押し出す
+  function collide(p, r) {
+    var t = toTile(p.x, p.z);
+    for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+      var tx = t.x + dx, ty = t.y + dy;
+      if (!solidAt(tx, ty)) continue;
+      var minX = tileX(tx) - T / 2, maxX = tileX(tx) + T / 2, minZ = tileZ(ty) - T / 2, maxZ = tileZ(ty) + T / 2;
+      var cx = clamp(p.x, minX, maxX), cz = clamp(p.z, minZ, maxZ);
+      var ex = p.x - cx, ez = p.z - cz, d = Math.sqrt(ex * ex + ez * ez);
+      if (d < r) {
+        if (d < 1e-5) { p.x += r; continue; }
+        p.x = cx + ex / d * r; p.z = cz + ez / d * r;
+      }
+    }
+  }
+  function lineOfSight(x0, z0, x1, z1) {
+    var len = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(len / 0.5);
+    for (var i = 1; i < n; i++) {
+      var t = toTile(x0 + (x1 - x0) * i / n, z0 + (z1 - z0) * i / n);
+      if (solidAt(t.x, t.y)) return false;
+    }
+    return true;
+  }
+  // 落とし穴：通路の半分だけをふさぐ
+  function pitRect(pt) {
+    var cx = tileX(pt.x), cz = tileZ(pt.y), h = T / 2;
+    if (pt.side === "n") return { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz };
+    if (pt.side === "s") return { x0: cx - h, x1: cx + h, z0: cz, z1: cz + h };
+    if (pt.side === "w") return { x0: cx - h, x1: cx, z0: cz - h, z1: cz + h };
+    return { x0: cx, x1: cx + h, z0: cz - h, z1: cz + h };
+  }
+  function inPit(x, z) {
+    for (var i = 0; i < state.pits.length; i++) {
+      var p = state.pits[i]; if (p.used) continue;
+      var r = pitRect(p), m = 0.2;
+      if (x > r.x0 + m && x < r.x1 - m && z > r.z0 + m && z < r.z1 - m) return p;
+    }
+    return null;
+  }
+  function canPlaceAt(tx, ty) {
+    if (tx < 1 || ty < 1 || tx > N - 2 || ty > N - 2) return false;
+    if (grid[ty][tx] !== 0) return false;
+    if (Math.abs(tx - START.x) + Math.abs(ty - START.y) < 2) return false;
+    if (tx === EXIT.x && Math.abs(ty - EXIT.y) < 2) return false;
+    for (var i = 0; i < KEY_TILES.length; i++) if (!state.keys[i] && KEY_TILES[i].x === tx && KEY_TILES[i].y === ty) return false;
+    var pt = toTile(state.player.x, state.player.z);
+    if (pt.x === tx && pt.y === ty) return false;
+    var gt = toTile(state.golem.x, state.golem.z);
+    if (state.golem.mode !== "home" && gt.x === tx && gt.y === ty) return false;
+    return true;
+  }
+  function placeFake(tx, ty) {
+    if (!state || state.phase !== "play" || state.points < WALL_COST || !canPlaceAt(tx, ty)) return false;
+    for (var i = 0; i < state.fakes.length; i++) if (state.fakes[i].x === tx && state.fakes[i].y === ty) return false;
+    for (var j = 0; j < state.pits.length; j++) if (state.pits[j].x === tx && state.pits[j].y === ty) return false;
+    state.points -= WALL_COST;
+    state.fakes.push({ x: tx, y: ty, t: FAKE_LIFE });
+    state.events.push({ t: "fake", x: tx, y: ty });
+    return true;
+  }
+  function placePit(tx, ty) {
+    if (!state || state.phase !== "play" || state.points < PIT_COST || !canPlaceAt(tx, ty)) return false;
+    if (state.pits.filter(function (p) { return !p.used; }).length >= MAX_PITS) return false;
+    for (var i = 0; i < state.pits.length; i++) if (state.pits[i].x === tx && state.pits[i].y === ty && !state.pits[i].used) return false;
+    var horiz = grid[ty][tx - 1] === 0 || grid[ty][tx + 1] === 0;
+    var vert = grid[ty - 1][tx] === 0 || grid[ty + 1][tx] === 0;
+    var side;
+    if (horiz && !vert) side = Math.random() < 0.5 ? "n" : "s";
+    else if (vert && !horiz) side = Math.random() < 0.5 ? "w" : "e";
+    else side = ["n", "s", "w", "e"][Math.floor(Math.random() * 4)];
+    state.points -= PIT_COST;
+    var id = (state.pitId = (state.pitId || 0) + 1);
+    state.pits.push({ id: id, x: tx, y: ty, side: side, used: false });
+    return true;
+  }
+  // ゴーレム：ドラッグ中は空の上、はなすと落ちる
+  function golemHover(x, z) {
+    var g = state.golem;
+    if (state.phase !== "play" || g.cool > 0 || (g.mode !== "home" && g.mode !== "hover")) return false;
+    g.mode = "hover"; g.x = x; g.z = z; g.y = 18;
+    return true;
+  }
+  function golemDrop() {
+    var g = state.golem;
+    if (g.mode !== "hover") return;
+    var t = toTile(g.x, g.z);
+    if (solidAt(t.x, t.y)) {
+      // 壁の上なら、いちばん近い通路に
+      var best = null, bd = 1e9;
+      for (var y = 1; y < N - 1; y++) for (var x = 1; x < N - 1; x++) if (!solidAt(x, y)) { var d = Math.hypot(tileX(x) - g.x, tileZ(y) - g.z); if (d < bd) { bd = d; best = { x: x, y: y }; } }
+      t = best;
+    }
+    g.x = tileX(t.x); g.z = tileZ(t.y);
+    g.mode = "fall"; g.vy = 0;
+  }
+  function golemVanish() {
+    var g = state.golem;
+    state.events.push({ t: "poof", x: g.x, z: g.z });
+    g.mode = "home"; g.cool = GOLEM_COOL; g.y = 30; g.lost = 0;
+  }
+  function respawnPlayer(reason) {
+    var p = state.player;
+    p.respawn = 2.8;
+    state.events.push({ t: "respawn", reason: reason });
+    if (state.golem.mode === "chase" || state.golem.mode === "stun") golemVanish();
+  }
+
+  function stepState(dt, now) {
+    if (!state || state.phase !== "play") return;
+    state.time -= dt;
+    state.pointT += dt;
+    if (state.pointT >= POINT_EVERY) { state.pointT -= POINT_EVERY; state.points = Math.min(POINT_MAX, state.points + 1); }
+    // にせの壁は数秒で消える
+    for (var i = state.fakes.length - 1; i >= 0; i--) {
+      state.fakes[i].t -= dt;
+      if (state.fakes[i].t <= 0) { state.events.push({ t: "unfake", x: state.fakes[i].x, y: state.fakes[i].y }); state.fakes.splice(i, 1); }
+    }
+    var p = state.player;
+    if (p.respawn > 0) { p.respawn -= dt; }
+    else {
+      // 鍵
+      var pt = toTile(p.x, p.z);
+      for (var k = 0; k < 3; k++) {
+        if (!state.keys[k] && KEY_TILES[k].x === pt.x && KEY_TILES[k].y === pt.y && Math.hypot(tileX(pt.x) - p.x, tileZ(pt.y) - p.z) < 1.1) {
+          state.keys[k] = true; state.events.push({ t: "key", i: k });
+          if (state.keys.every(Boolean)) state.events.push({ t: "gate" });
+        }
+      }
+      // 落とし穴
+      var pit = inPit(p.x, p.z);
+      if (pit) { pit.used = true; state.events.push({ t: "fall", id: pit.id }); respawnPlayer("pit"); }
+      // 出口
+      if (state.keys.every(Boolean) && pt.y >= N - 1) { endGame("vr"); return; }
+    }
+    // ゴーレム
+    var g = state.golem;
+    if (g.cool > 0) g.cool -= dt;
+    if (g.mode === "fall") {
+      g.vy -= 30 * dt; g.y += g.vy * dt;
+      if (g.y <= 0) { g.y = 0; g.mode = "stun"; g.stun = GOLEM_STUN; state.events.push({ t: "land", x: g.x, z: g.z }); }
+    } else if (g.mode === "stun") {
+      g.stun -= dt;
+      if (g.stun <= 0) { g.mode = "chase"; g.lost = 0; g.pathT = 0; }
+    } else if (g.mode === "chase") {
+      var see = p.respawn <= 0 && Math.hypot(p.x - g.x, p.z - g.z) < 22 && lineOfSight(g.x, g.z, p.x, p.z);
+      if (see) g.lost = 0; else g.lost += dt;
+      if (g.lost > GOLEM_LOSE) { golemVanish(); }
+      else {
+        g.pathT -= dt;
+        if (g.pathT <= 0) {
+          g.pathT = 0.4;
+          var gt = toTile(g.x, g.z), ptt = toTile(p.x, p.z);
+          var d = bfs(grid, ptt.x, ptt.y, function (x, y) { return solidAt(x, y); });
+          var best = null, bv = d[gt.y] && d[gt.y][gt.x] >= 0 ? d[gt.y][gt.x] : 1e9;
+          [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (o) {
+            var nx = gt.x + o[0], ny = gt.y + o[1];
+            if (ny >= 0 && ny < N && nx >= 0 && nx < N && d[ny][nx] >= 0 && d[ny][nx] < bv) { bv = d[ny][nx]; best = { x: nx, y: ny }; }
+          });
+          g.next = best;
+        }
+        var tx = see ? p.x : (g.next ? tileX(g.next.x) : g.x), tz = see ? p.z : (g.next ? tileZ(g.next.y) : g.z);
+        if (!see && g.next) { tx = tileX(g.next.x); tz = tileZ(g.next.y); }
+        var dx = tx - g.x, dz = tz - g.z, dd = Math.sqrt(dx * dx + dz * dz) || 1;
+        g.x += dx / dd * GOLEM_SPEED * dt; g.z += dz / dd * GOLEM_SPEED * dt;
+        g.rot = Math.atan2(-dx, -dz);
+        var gp = { x: g.x, z: g.z }; collide(gp, 0.6); g.x = gp.x; g.z = gp.z;
+        if (p.respawn <= 0 && Math.hypot(p.x - g.x, p.z - g.z) < 1.1) { state.events.push({ t: "caught" }); respawnPlayer("golem"); }
+      }
+    }
+    if (state.time <= 0) endGame("pc");
+  }
+  function endGame(w) {
+    if (state.phase !== "play") return;
+    state.phase = "end"; state.winner = w;
+    state.events.push({ t: "end", winner: w });
+  }
+  function startGame() {
+    var seed = state.seed;
+    var fresh = newState(seed);
+    fresh.phase = "play";
+    fresh.events.push({ t: "start", seed: seed });
+    state = fresh;
+  }
+
+  // ================================================================
+  // 描画の準備
+  // ================================================================
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType("local");
+  if (renderer.xr.setFoveation) renderer.xr.setFoveation(1);
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xbfe3f5);
+  scene.fog = new THREE.Fog(0xcfe9f5, 40, 140);
+  var camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 400);
+  camera.rotation.order = "YXZ";
+  var rig = new THREE.Group(); rig.add(camera); scene.add(rig);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x6a8a50, 0.85));
+  var sun = new THREE.DirectionalLight(0xfff2d8, 0.75); sun.position.set(30, 60, 20); scene.add(sun);
+
+  function canvasTex(w, h, draw) { var c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); return new THREE.CanvasTexture(c); }
+  function box(w, h, d, mat) { return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); }
+  var glowTex = canvasTex(64, 64, function (g) {
+    var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.3, "rgba(255,255,255,0.5)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  });
+  function glow(color, size, op) { var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: color, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false })); s.scale.set(size, size, 1); return s; }
+
+  // 空（明るい青と、ゆっくり流れる雲）
+  var clouds = [];
+  (function () {
+    var sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ side: THREE.BackSide, fog: false, map: canvasTex(4, 256, function (g) {
+      var gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, "#5aa8e8"); gr.addColorStop(0.45, "#9fd0f0"); gr.addColorStop(0.52, "#e6f4fa"); gr.addColorStop(1, "#e6f4fa");
+      g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+    }) }));
+    scene.add(sky);
+    var cloudTex = canvasTex(256, 128, function (g) {
+      for (var i = 0; i < 9; i++) {
+        var gr = g.createRadialGradient(40 + i * 22, 70 + Math.sin(i) * 10, 0, 40 + i * 22, 70 + Math.sin(i) * 10, 36 + (i % 3) * 8);
+        gr.addColorStop(0, "rgba(255,255,255,0.95)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = gr; g.fillRect(0, 0, 256, 128);
+      }
+    });
+    for (var c = 0; c < 14; c++) {
+      var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0.9, fog: false, depthWrite: false }));
+      var sc = rand(30, 60); s.scale.set(sc, sc / 2, 1);
+      var a = rand(0, 6.28), d = rand(80, 200);
+      s.position.set(Math.cos(a) * d, rand(45, 90), Math.sin(a) * d);
+      scene.add(s); clouds.push({ s: s, sp: rand(0.5, 1.5) });
+    }
+    var sunG = glow(0xfff6d0, 60, 0.9); sunG.material.fog = false; sunG.position.set(120, 140, -160); scene.add(sunG);
+  })();
+
+  // 地面：外の芝生
+  var grassTex = canvasTex(128, 128, function (g) {
+    g.fillStyle = "#6bab4c"; g.fillRect(0, 0, 128, 128);
+    for (var i = 0; i < 900; i++) { var v = rand(-20, 20); g.fillStyle = "rgb(" + (100 + v) + "," + (165 + v) + "," + (70 + v * 0.5) + ")"; g.fillRect(rand(0, 128), rand(0, 128), 1, rand(2, 5)); }
+  });
+  grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping; grassTex.repeat.set(60, 60);
+  var lawn = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ map: grassTex }));
+  lawn.rotation.x = -Math.PI / 2; lawn.position.y = -0.02; scene.add(lawn);
+
+  // 生け垣・石だたみ（迷路ができてから作る）
+  var hedgeTex = canvasTex(128, 128, function (g) {
+    g.fillStyle = "#2f6f2c"; g.fillRect(0, 0, 128, 128);
+    for (var i = 0; i < 700; i++) {
+      var v = rand(-25, 30);
+      g.fillStyle = "rgb(" + (55 + v) + "," + (120 + v) + "," + (50 + v * 0.6) + ")";
+      g.beginPath(); g.ellipse(rand(0, 128), rand(0, 128), rand(2, 5), rand(1, 3), rand(0, 3), 0, 6.3); g.fill();
+    }
+  });
+  hedgeTex.wrapS = hedgeTex.wrapT = THREE.RepeatWrapping;
+  var hedgeMat = new THREE.MeshLambertMaterial({ map: hedgeTex });
+  var hedgeTopMat = new THREE.MeshLambertMaterial({ color: 0x5aa048 });
+  var pathTex = canvasTex(128, 128, function (g) {
+    g.fillStyle = "#8a8070"; g.fillRect(0, 0, 128, 128);
+    for (var y = 0; y < 4; y++) for (var x = 0; x < 4; x++) {
+      var v = rand(-14, 14);
+      g.fillStyle = "rgb(" + (186 + v) + "," + (174 + v) + "," + (150 + v) + ")";
+      g.fillRect(x * 32 + 2 + (y % 2) * 8, y * 32 + 2, 28, 28);
+    }
+  });
+  pathTex.wrapS = pathTex.wrapT = THREE.RepeatWrapping;
+  var mazeGroup = new THREE.Group(); scene.add(mazeGroup);
+  var keyMeshes = [], gateMesh = null, gateDoor = null;
+  var fakeMeshes = {};   // "x,y" → mesh
+  var pitMeshes = {};    // id → mesh
+  function buildMaze() {
+    while (mazeGroup.children.length) mazeGroup.remove(mazeGroup.children[0]);
+    keyMeshes = []; fakeMeshes = {}; pitMeshes = {};
+    // 生け垣：1回の描画でまとめて
+    var walls = [];
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) if (grid[y][x] === 1) walls.push([x, y]);
+    var hedges = new THREE.InstancedMesh(new THREE.BoxGeometry(T, WALL_H, T), hedgeMat, walls.length);
+    var tops = new THREE.InstancedMesh(new THREE.BoxGeometry(T * 0.92, 0.35, T * 0.92), hedgeTopMat, walls.length);
+    var m = new THREE.Matrix4();
+    walls.forEach(function (w, i) {
+      m.makeTranslation(tileX(w[0]), WALL_H / 2, tileZ(w[1])); hedges.setMatrixAt(i, m);
+      m.makeTranslation(tileX(w[0]), WALL_H + 0.12, tileZ(w[1])); tops.setMatrixAt(i, m);
+    });
+    mazeGroup.add(hedges); mazeGroup.add(tops);
+    // 道の石だたみ
+    pathTex.repeat.set(N, N);
+    var path = new THREE.Mesh(new THREE.PlaneGeometry(N * T, N * T), new THREE.MeshLambertMaterial({ map: pathTex }));
+    path.rotation.x = -Math.PI / 2; path.position.y = 0.005; mazeGroup.add(path);
+    // 生け垣の足もとの花
+    var flowers = [];
+    for (var y2 = 1; y2 < N - 1; y2++) for (var x2 = 1; x2 < N - 1; x2++) {
+      if (grid[y2][x2] !== 0) continue;
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (o) {
+        if (grid[y2 + o[1]][x2 + o[0]] === 1 && Math.random() < 0.55) {
+          for (var f = 0; f < 3; f++) {
+            var along = rand(-T / 2 + 0.2, T / 2 - 0.2);
+            flowers.push([tileX(x2) + o[0] * (T / 2 - 0.15) + (o[1] ? along : 0), tileZ(y2) + o[1] * (T / 2 - 0.15) + (o[0] ? along : 0)]);
+          }
+        }
+      });
+    }
+    var fl = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 6, 4), new THREE.MeshLambertMaterial({ color: 0xffffff }), flowers.length);
+    var cols = [0xff7aa8, 0xffd84a, 0xffffff, 0xb88aff, 0xff9a4a], col = new THREE.Color();
+    flowers.forEach(function (f, i) { m.makeTranslation(f[0], rand(0.12, 0.35), f[1]); fl.setMatrixAt(i, m); fl.setColorAt(i, col.setHex(cols[i % cols.length])); });
+    mazeGroup.add(fl);
+    // スタートの小さな広場の印
+    var startMark = new THREE.Mesh(new THREE.CircleGeometry(1.0, 24), new THREE.MeshLambertMaterial({ color: 0x9fd8f0 }));
+    startMark.rotation.x = -Math.PI / 2; startMark.position.set(tileX(START.x), 0.02, tileZ(START.y)); mazeGroup.add(startMark);
+    // 出口の門（石のアーチと、鉄の扉）
+    var gx = tileX(EXIT.x), gz = tileZ(EXIT.y);
+    var stone = new THREE.MeshLambertMaterial({ color: 0xe8e0cc });
+    [-1, 1].forEach(function (s) { var pil = box(0.5, WALL_H + 1.2, 0.6, stone); pil.position.set(gx + s * (T / 2 + 0.05), (WALL_H + 1.2) / 2, gz); mazeGroup.add(pil); });
+    var arch = new THREE.Mesh(new THREE.TorusGeometry(T / 2 + 0.05, 0.25, 8, 16, Math.PI), stone); arch.position.set(gx, WALL_H + 1.2, gz); mazeGroup.add(arch);
+    gateDoor = new THREE.Group();
+    var bars = new THREE.MeshLambertMaterial({ color: 0x3a3a40 });
+    for (var b = 0; b < 7; b++) { var bar = box(0.06, WALL_H, 0.06, bars); bar.position.set(-T / 2 + 0.2 + b * (T - 0.4) / 6, WALL_H / 2, 0); gateDoor.add(bar); }
+    [0.4, WALL_H - 0.4].forEach(function (yy) { var hb = box(T, 0.08, 0.08, bars); hb.position.y = yy; gateDoor.add(hb); });
+    gateDoor.position.set(gx, 0, gz); mazeGroup.add(gateDoor);
+    var gateGlow = glow(0xfff2a0, 3, 0); gateGlow.position.set(gx, 1.6, gz + 0.5); mazeGroup.add(gateGlow); gateDoor.userData.glow = gateGlow;
+    // 鍵
+    KEY_TILES.forEach(function (k, i) {
+      var g = new THREE.Group();
+      var gold = new THREE.MeshPhongMaterial({ color: 0xf2c14e, shininess: 120, specular: 0xffffff, emissive: 0x4a3000 });
+      var ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.045, 8, 16), gold); ring.position.y = 0.25; g.add(ring);
+      var shaft = box(0.06, 0.45, 0.06, gold); shaft.position.y = -0.1; g.add(shaft);
+      var t1 = box(0.16, 0.05, 0.06, gold); t1.position.set(0.08, -0.25, 0); g.add(t1);
+      var t2 = box(0.12, 0.05, 0.06, gold); t2.position.set(0.06, -0.12, 0); g.add(t2);
+      var gl = glow(0xffe080, 1.4, 0.7); g.add(gl);
+      // 台座
+      var ped = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 0.8, 12), new THREE.MeshLambertMaterial({ color: 0xf0e8d8 }));
+      ped.position.y = -0.95; g.add(ped);
+      g.position.set(tileX(k.x), 1.35, tileZ(k.y));
+      mazeGroup.add(g); keyMeshes.push(g);
+    });
+    // 迷路のまわりの飾り：大きな木
+    var trunkMat = new THREE.MeshLambertMaterial({ color: 0x8a6a48 }), leafMat = new THREE.MeshLambertMaterial({ color: 0x4f9a46 });
+    for (var t = 0; t < 28; t++) {
+      var a = t / 28 * 6.28 + rand(-0.05, 0.05), d = N * T * 0.75 + rand(4, 20);
+      var tr = new THREE.Group();
+      var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 5, 7), trunkMat); trunk.position.y = 2.5; tr.add(trunk);
+      for (var lb = 0; lb < 3; lb++) { var leaf = new THREE.Mesh(new THREE.SphereGeometry(rand(2.2, 3.2), 8, 6), leafMat); leaf.position.set(rand(-1, 1), 5.5 + lb * 1.2, rand(-1, 1)); tr.add(leaf); }
+      tr.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+      mazeGroup.add(tr);
+    }
+  }
+
+  // にせの壁、落とし穴の見た目
+  var leaves = [];
+  function leafBurst(x, z, n) {
+    for (var i = 0; i < n; i++) {
+      var s = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.08), new THREE.MeshLambertMaterial({ color: 0x4f9a46, side: THREE.DoubleSide }));
+      s.position.set(x + rand(-1, 1), rand(0.5, 3), z + rand(-1, 1)); scene.add(s);
+      leaves.push({ m: s, vx: rand(-1.5, 1.5), vy: rand(0.5, 2.5), vz: rand(-1.5, 1.5), life: rand(0.8, 1.6) });
+    }
+  }
+  function showFake(tx, ty) {
+    var k = tx + "," + ty; if (fakeMeshes[k]) return;
+    var g = new THREE.Group();
+    var h = box(T, WALL_H, T, hedgeMat); h.position.y = WALL_H / 2; g.add(h);
+    var tp = box(T * 0.92, 0.35, T * 0.92, hedgeTopMat); tp.position.y = WALL_H + 0.12; g.add(tp);
+    g.position.set(tileX(tx), 0, tileZ(ty)); g.scale.y = 0.01;
+    scene.add(g); fakeMeshes[k] = { g: g, t: 0, out: false };
+    leafBurst(tileX(tx), tileZ(ty), 16); playRustle();
+  }
+  function hideFake(tx, ty) {
+    var f = fakeMeshes[tx + "," + ty]; if (!f) return;
+    f.out = true; f.t = 0; leafBurst(tileX(tx), tileZ(ty), 10);
+  }
+  var crackTex = canvasTex(128, 128, function (g) {
+    g.fillStyle = "rgba(0,0,0,0)"; g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = "rgba(90,80,60,0.55)"; g.lineWidth = 2;
+    for (var i = 0; i < 6; i++) { g.beginPath(); var x = 64, y = 64; g.moveTo(x, y); for (var k = 0; k < 4; k++) { x += rand(-22, 22); y += rand(-22, 22); g.lineTo(x, y); } g.stroke(); }
+    g.fillStyle = "rgba(120,110,90,0.12)"; g.fillRect(0, 0, 128, 128);
+  });
+  function syncPits(list) {
+    var alive = {};
+    list.forEach(function (p) {
+      alive[p.id] = true;
+      if (!pitMeshes[p.id]) {
+        var r = pitRect(p);
+        var g = new THREE.Group();
+        // よく見ると分かる：少し色がちがって、ひびが入っている
+        var cover = new THREE.Mesh(new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0), new THREE.MeshLambertMaterial({ map: crackTex, transparent: true }));
+        cover.rotation.x = -Math.PI / 2; cover.position.set((r.x0 + r.x1) / 2, 0.012, (r.z0 + r.z1) / 2); g.add(cover);
+        var hole = new THREE.Mesh(new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0), new THREE.MeshBasicMaterial({ color: 0x0a0806 }));
+        hole.rotation.x = -Math.PI / 2; hole.position.set((r.x0 + r.x1) / 2, 0.014, (r.z0 + r.z1) / 2); hole.visible = false; g.add(hole);
+        scene.add(g); pitMeshes[p.id] = { g: g, cover: cover, hole: hole };
+      }
+      var pm = pitMeshes[p.id];
+      if (p.used) { pm.cover.visible = false; pm.hole.visible = true; }
+    });
+    for (var id in pitMeshes) if (!alive[id]) { scene.remove(pitMeshes[id].g); delete pitMeshes[id]; }
+  }
+
+  // ===== ゴーレム =====
+  var golem = new THREE.Group();
+  (function () {
+    var rock = new THREE.MeshLambertMaterial({ color: 0x9a948a, flatShading: true });
+    var moss = new THREE.MeshLambertMaterial({ color: 0x6a9a48, flatShading: true });
+    var body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.9, 0), rock); body.scale.set(1.1, 1.0, 0.8); body.position.y = 1.7; golem.add(body);
+    var head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5, 0), rock); head.position.set(0, 2.85, -0.1); golem.add(head);
+    var mossTop = new THREE.Mesh(new THREE.DodecahedronGeometry(0.35, 0), moss); mossTop.scale.set(1.4, 0.5, 1.2); mossTop.position.set(0, 3.25, -0.1); golem.add(mossTop);
+    [-1, 1].forEach(function (s) {
+      var eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), new THREE.MeshBasicMaterial({ color: 0x7af0ff })); eye.position.set(s * 0.18, 2.9, -0.52); golem.add(eye);
+      var eg = glow(0x7af0ff, 0.5, 0.9); eg.position.copy(eye.position); golem.add(eg);
+      var arm = new THREE.Mesh(new THREE.DodecahedronGeometry(0.45, 0), rock); arm.scale.set(0.8, 1.5, 0.8); arm.position.set(s * 1.25, 1.5, 0); golem.add(arm);
+      var fist = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4, 0), rock); fist.position.set(s * 1.35, 0.6, -0.1); golem.add(fist);
+      var leg = new THREE.Mesh(new THREE.DodecahedronGeometry(0.42, 0), rock); leg.scale.set(0.9, 1.3, 0.9); leg.position.set(s * 0.45, 0.5, 0); golem.add(leg);
+      golem.userData["arm" + s] = arm;
+    });
+    var m2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3, 0), moss); m2.position.set(0.6, 2.3, 0.4); golem.add(m2);
+  })();
+  golem.visible = false; scene.add(golem);
+  var golemShadow = new THREE.Mesh(new THREE.CircleGeometry(1.4, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
+  golemShadow.rotation.x = -Math.PI / 2; golemShadow.position.y = 0.03; golemShadow.visible = false; scene.add(golemShadow);
+
+  // ===== プレイヤー（パソコン側から見た姿） =====
+  var avatar = new THREE.Group();
+  (function () {
+    var dress = new THREE.MeshLambertMaterial({ color: 0xe86a5a });
+    var skin = new THREE.MeshLambertMaterial({ color: 0xf2d0b0 });
+    var hair = new THREE.MeshLambertMaterial({ color: 0x5a3a28 });
+    var body = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 10), dress); body.position.y = 0.75; avatar.add(body);
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 10), skin); head.position.y = 1.5; avatar.add(head);
+    var h2 = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 10, 0, Math.PI * 2, 0, Math.PI / 1.8), hair); h2.position.y = 1.53; h2.rotation.x = 0.3; avatar.add(h2);
+    var arrow = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 3), new THREE.MeshBasicMaterial({ color: 0xffe14a }));
+    arrow.rotation.x = -Math.PI / 2; arrow.position.set(0, 2.4, -0.4); avatar.add(arrow);
+    var ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0xffe14a, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; avatar.add(ring);
+  })();
+  avatar.visible = false; scene.add(avatar);
+
+  // ===== 演出：土ぼこり、ぽんっ =====
+  var puffs = [];
+  function dust(x, z, n, color) {
+    for (var i = 0; i < n; i++) {
+      var s = glow(color || 0xd8c8a8, rand(0.8, 1.6), 0.8); s.material.blending = THREE.NormalBlending;
+      s.position.set(x + rand(-0.6, 0.6), rand(0.2, 0.8), z + rand(-0.6, 0.6)); scene.add(s);
+      puffs.push({ s: s, vx: rand(-2.5, 2.5), vy: rand(0.3, 1.5), vz: rand(-2.5, 2.5), life: rand(0.8, 1.4), max: 1.4 });
+    }
+  }
+  var sparkles = [];
+  function sparkle(x, y, z, color, n) {
+    for (var i = 0; i < n; i++) {
+      var s = glow(color, rand(0.2, 0.45), 1); s.position.set(x, y, z); scene.add(s);
+      sparkles.push({ s: s, vx: rand(-2, 2), vy: rand(0.5, 3), vz: rand(-2, 2), life: rand(0.6, 1.2) });
+    }
+  }
+  function updateFx(dt) {
+    var i;
+    for (i = puffs.length - 1; i >= 0; i--) {
+      var p = puffs[i]; p.life -= dt;
+      p.s.position.x += p.vx * dt; p.s.position.y += p.vy * dt; p.s.position.z += p.vz * dt; p.vx *= 0.94; p.vz *= 0.94;
+      p.s.scale.multiplyScalar(1 + dt * 0.8); p.s.material.opacity = Math.max(0, p.life / p.max) * 0.8;
+      if (p.life <= 0) { scene.remove(p.s); puffs.splice(i, 1); }
+    }
+    for (i = sparkles.length - 1; i >= 0; i--) {
+      var s = sparkles[i]; s.life -= dt; s.vy -= 4 * dt;
+      s.s.position.x += s.vx * dt; s.s.position.y += s.vy * dt; s.s.position.z += s.vz * dt;
+      s.s.material.opacity = Math.max(0, s.life);
+      if (s.life <= 0) { scene.remove(s.s); sparkles.splice(i, 1); }
+    }
+    for (i = leaves.length - 1; i >= 0; i--) {
+      var l = leaves[i]; l.life -= dt; l.vy -= 3 * dt;
+      l.m.position.x += l.vx * dt; l.m.position.y = Math.max(0.02, l.m.position.y + l.vy * dt); l.m.position.z += l.vz * dt;
+      l.m.rotation.x += dt * 6; l.m.rotation.y += dt * 4;
+      if (l.life <= 0) { scene.remove(l.m); leaves.splice(i, 1); }
+    }
+    for (var k in fakeMeshes) {
+      var f = fakeMeshes[k]; f.t += dt;
+      if (!f.out) f.g.scale.y = Math.min(1, f.t / 0.25);
+      else { f.g.scale.y = Math.max(0.01, 1 - f.t / 0.3); if (f.t > 0.3) { scene.remove(f.g); delete fakeMeshes[k]; } }
+    }
+  }
+
+  // ================================================================
+  // 音（明るいオルゴールのBGMと、効果音）
+  // ================================================================
+  var actx = null, noiseBuf = null, musicT = 0, stepT = 0;
+  function startAudio() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+      if (!actx) {
+        actx = new AC();
+        noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
+        var d = noiseBuf.getChannelData(0); for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (actx.state === "suspended") actx.resume();
+    } catch (e) { actx = null; }
+  }
+  function tone(freq, dur, vol, type, delay, slide) {
+    if (!actx) return;
+    var t = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(); o.type = type || "sine"; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
+    var g = actx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + dur + 0.05);
+  }
+  function noise(dur, freq, vol, type, delay) {
+    if (!actx) return;
+    var t = actx.currentTime + (delay || 0);
+    var src = actx.createBufferSource(); src.buffer = noiseBuf;
+    var f = actx.createBiquadFilter(); f.type = type || "lowpass"; f.frequency.value = freq;
+    var g = actx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(f); f.connect(g); g.connect(actx.destination); src.start(t, rand(0, 0.5)); src.stop(t + dur + 0.05);
+  }
+  // オルゴール風の、くり返すメロディ
+  var MELODY = [72, 76, 79, 76, 74, 77, 81, 77, 72, 76, 79, 84, 83, 79, 77, 74];
+  var musicStep = 0;
+  function updateMusic(dt) {
+    if (!actx || !role) return;
+    musicT -= dt;
+    if (musicT > 0) return;
+    musicT = 0.32;
+    var n = MELODY[musicStep % MELODY.length]; musicStep++;
+    tone(440 * Math.pow(2, (n - 69) / 12), 0.6, 0.035, "triangle");
+    if (musicStep % 4 === 1) tone(440 * Math.pow(2, (n - 81) / 12), 0.9, 0.025, "sine");
+  }
+  function playKey() { [880, 1108, 1318, 1760].forEach(function (f, i) { tone(f, 0.3, 0.12, "triangle", i * 0.07); }); }
+  function playGate() { [523, 659, 784, 1046, 1318].forEach(function (f, i) { tone(f, 0.5, 0.12, "triangle", i * 0.1); }); }
+  function playRustle() { noise(0.4, 2500, 0.18, "bandpass"); }
+  function playThud() { tone(60, 0.6, 0.5, "sine", 0, 35); noise(0.5, 400, 0.4); }
+  function playFall() { tone(900, 1.0, 0.12, "sine", 0, 150); }
+  function playPoof() { noise(0.35, 1800, 0.2, "bandpass"); tone(500, 0.2, 0.06, "sine", 0, 900); }
+  function playCaught() { tone(200, 0.4, 0.16, "square", 0, 90); }
+  function playWin() { [523, 659, 784, 1046].forEach(function (f, i) { tone(f, 0.45, 0.13, "triangle", i * 0.12); }); }
+  function playLose() { [392, 330, 262].forEach(function (f, i) { tone(f, 0.45, 0.13, "triangle", i * 0.18); }); }
+  function playStep() { noise(0.06, 1500, 0.06, "bandpass"); }
+
+  // ================================================================
+  // 通信
+  // ================================================================
+  var role = "", peer = null, conn = null, netT = 0;
+  var remote = { phase: "lobby", time: GAME_TIME, keys: [false, false, false], golem: null, fakes: [], pits: [], points: 0 };
+  function sendState() {
+    if (!conn || !conn.open) return;
+    var g = state.golem;
+    conn.send({ t: "s", phase: state.phase, time: +state.time.toFixed(2), keys: state.keys, winner: state.winner,
+      golem: { m: g.mode, x: +g.x.toFixed(2), y: +g.y.toFixed(2), z: +g.z.toFixed(2), r: +(g.rot || 0).toFixed(2), s: g.stun },
+      fakes: state.fakes.map(function (f) { return [f.x, f.y]; }),
+      pits: state.pits.map(function (p) { return [p.id, p.x, p.y, p.side, p.used ? 1 : 0]; }),
+      ev: state.events.slice(0, 30) });
+  }
+  function netErr(e) {
+    var t = e && e.type;
+    if (t === "peer-unavailable") return "その合言葉のパソコンが見つかりません";
+    if (t === "unavailable-id") return "合言葉が重なりました。読みこみ直してください";
+    if (t === "network" || t === "server-error" || t === "socket-error") return "つなぐ手伝いのサーバーに届きません";
+    if (t === "browser-incompatible") return "このブラウザは、つなぐ仕組みに対応していません";
+    return "エラー：" + (t || e);
+  }
+  function hostSetup() {
+    var code = String(Math.floor(1000 + Math.random() * 9000));
+    $("code").textContent = code;
+    peer = new Peer(PREFIX + code, { debug: 1 });
+    peer.on("open", function () { $("status").textContent = "VRの人を待っています（合言葉 " + code + "）"; });
+    peer.on("connection", function (c) {
+      conn = c;
+      c.on("open", function () { $("status").textContent = "VRの人とつながりました！ スタートを押してください"; $("btnStart").disabled = false; c.send({ t: "init", seed: state.seed }); });
+      c.on("data", function (d) {
+        if (!d || !d.t) return;
+        if (d.t === "p" && state && state.player.respawn <= 0) { state.player.x = d.x; state.player.z = d.z; state.player.yaw = d.yaw; }
+        else if (d.t === "restart" && state.phase === "end") { startGame(); hideEnd(); }
+      });
+      c.on("close", function () { $("status").textContent = "VRの人との接続が切れました"; });
+    });
+    peer.on("error", function (e) { $("status").textContent = netErr(e); });
+  }
+  var connecting = false;
+  function joinSetup(code) {
+    $("status2").textContent = "つないでいます…";
+    peer = new Peer(undefined, { debug: 1 });
+    peer.on("open", function () {
+      conn = peer.connect(PREFIX + code, { reliable: true });
+      conn.on("open", function () {
+        $("cardJoin").hidden = true; $("cardEnter").hidden = false;
+        $("enterEyebrow").textContent = "つながりました";
+      });
+      conn.on("data", function (d) {
+        if (!d) return;
+        if (d.t === "init") { makeMaze(d.seed); buildMaze(); localPlayerToStart(); }
+        else if (d.t === "s") {
+          remote.phase = d.phase; remote.time = d.time; remote.keys = d.keys; remote.golem = d.golem; remote.fakes = d.fakes; remote.winner = d.winner;
+          remote.pits = d.pits.map(function (a) { return { id: a[0], x: a[1], y: a[2], side: a[3], used: !!a[4] }; });
+          (d.ev || []).forEach(handleEvent);
+        }
+      });
+      conn.on("close", function () { showEnd("接続が切れました", "#c0392b", ""); });
+    });
+    peer.on("error", function (e) { $("status2").textContent = netErr(e); connecting = false; });
+  }
+
+  // ================================================================
+  // 出来事（どちらの画面でも同じように見せる）
+  // ================================================================
+  function handleEvent(ev) {
+    var vrSide = role === "vr" || role === "solo";
+    if (ev.t === "fake") showFake(ev.x, ev.y);
+    else if (ev.t === "unfake") hideFake(ev.x, ev.y);
+    else if (ev.t === "key") {
+      var km = keyMeshes[ev.i]; if (km) { sparkle(km.position.x, km.position.y, km.position.z, 0xffe080, 24); km.visible = false; }
+      playKey();
+    } else if (ev.t === "gate") {
+      playGate();
+      if (gateDoor) { gateDoor.userData.open = true; gateDoor.userData.glow.material.opacity = 0.9; }
+    } else if (ev.t === "land") {
+      dust(ev.x, ev.z, 14); playThud();
+      if (vrSide) { var d = Math.hypot(ev.x - me.x, ev.z - me.z); shakeT = Math.max(shakeT, d < 12 ? 0.5 : 0.2); }
+    } else if (ev.t === "poof") { dust(ev.x, ev.z, 10, 0xffffff); playPoof(); }
+    else if (ev.t === "respawn") {
+      if (vrSide) beginRespawn(ev.reason);
+      if (ev.reason === "golem") playCaught();
+    } else if (ev.t === "fall") { playFall(); }
+    else if (ev.t === "start") {
+      hideEnd();
+      if (role === "vr") { makeMaze(ev.seed); buildMaze(); }
+      if (role !== "vr") buildMaze();
+      if (vrSide) localPlayerToStart();
+    } else if (ev.t === "end") {
+      var won = (ev.winner === "vr") === vrSide;
+      var sub = ev.winner === "vr" ? "出口から脱出！" : "時間切れ";
+      if (vrSide) sub += " ・ 引き金を長押しでもう一度"; else sub += " ・ Enter でもう一度";
+      showEnd(won ? "勝ち！" : "負け…", won ? "#3f8a3a" : "#c0392b", sub);
+      if (won) playWin(); else playLose();
+    }
+  }
+
+  // ================================================================
+  // VR側：歩く
+  // ================================================================
+  var me = { x: 0, z: 0, y: EYE, respawnT: -1 };
+  var walking = false, flatYaw = Math.PI, flatPitch = -0.05, shakeT = 0;
+  function localPlayerToStart() { me.x = tileX(START.x); me.z = tileZ(START.y); me.y = EYE; flatYaw = startYaw(); }
+  function startYaw() {
+    // スタートから、ひらいている方を向く
+    if (grid[START.y][START.x + 1] === 0) return -Math.PI / 2;
+    return Math.PI;
+  }
+  function beginRespawn(reason) {
+    me.respawnT = 0; me.reason = reason;
+  }
+  function vrMove(dt, now) {
+    var yaw;
+    var q = new THREE.Quaternion(); camera.getWorldQuaternion(q);
+    yaw = new THREE.Euler().setFromQuaternion(q, "YXZ").y;
+    // やり直し中：落ちる → 空から、ふわっと降りてくる
+    if (me.respawnT >= 0) {
+      me.respawnT += dt;
+      var t = me.respawnT;
+      if (me.reason === "pit" && t < 0.8) { me.y = EYE - t * t * 9; fade.material.opacity = Math.min(1, t / 0.6); }
+      else if (me.reason === "golem" && t < 0.6) { fade.material.opacity = Math.min(1, t / 0.4); }
+      else {
+        if (!me.atStart) { me.x = tileX(START.x); me.z = tileZ(START.y); me.atStart = true; }
+        var k = Math.min(1, (t - 0.8) / 2.0);
+        me.y = EYE + 16 * (1 - k) * (1 - k);
+        fade.material.opacity = Math.max(0, 1 - (t - 0.8) / 0.5);
+        if (k >= 1) { me.respawnT = -1; me.atStart = false; me.y = EYE; }
+      }
+      return yaw;
+    }
+    var playing = role === "solo" ? state.phase === "play" : remote.phase === "play";
+    if (walking && playing) {
+      var p = { x: me.x - Math.sin(yaw) * WALK * dt, z: me.z - Math.cos(yaw) * WALK * dt };
+      collide(p, PLAYER_R);
+      me.x = p.x; me.z = p.z;
+      stepT -= dt; if (stepT <= 0) { stepT = 0.42; playStep(); }
+    }
+    return yaw;
+  }
+  for (var ci = 0; ci < 2; ci++) {
+    (function (ctrl) {
+      ctrl.addEventListener("selectstart", function () { startAudio(); walking = true; holdT = 0; });
+      ctrl.addEventListener("selectend", function () { walking = false; });
+      rig.add(ctrl);
+      ctrl.add(wand());
+    })(renderer.xr.getController(ci));
+  }
+  // 手もとの小さな時計（残り時間と鍵の数）
+  var watchCanvas = document.createElement("canvas"); watchCanvas.width = 256; watchCanvas.height = 160;
+  var watchTex = new THREE.CanvasTexture(watchCanvas);
+  function wand() {
+    var g = new THREE.Group();
+    var frame = box(0.13, 0.085, 0.015, new THREE.MeshLambertMaterial({ color: 0xc8a060 })); frame.rotation.x = -0.7; frame.position.set(0, 0.03, -0.05); g.add(frame);
+    var face = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.075), new THREE.MeshBasicMaterial({ map: watchTex })); face.rotation.x = -0.7; face.position.set(0, 0.036, -0.044); g.add(face);
+    var grip = box(0.035, 0.035, 0.12, new THREE.MeshLambertMaterial({ color: 0x7a5a3a })); grip.position.set(0, 0, 0.05); g.add(grip);
+    return g;
+  }
+  var watchKey = "";
+  function drawWatch(time, keys) {
+    var k = Math.ceil(time) + "|" + keys.join(",");
+    if (k === watchKey) return; watchKey = k;
+    var g = watchCanvas.getContext("2d");
+    g.fillStyle = "#fffdf4"; g.fillRect(0, 0, 256, 160);
+    var tt = Math.max(0, Math.ceil(time)), mm = Math.floor(tt / 60), ss = tt % 60;
+    g.fillStyle = tt <= 30 ? "#c0392b" : "#2d5a2a"; g.font = "bold 70px 'Dela Gothic One', sans-serif"; g.textAlign = "center";
+    g.fillText(mm + ":" + (ss < 10 ? "0" : "") + ss, 128, 80);
+    for (var i = 0; i < 3; i++) {
+      g.fillStyle = keys[i] ? "#e0a820" : "rgba(0,0,0,0.15)";
+      g.beginPath(); g.arc(78 + i * 50, 125, 15, 0, 6.3); g.fill();
+      g.fillRect(74 + i * 50, 125, 8, 22);
+    }
+    watchTex.needsUpdate = true;
+  }
+  // 暗転（落ちる・つかまるとき）
+  var fade = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 8), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false, depthWrite: false, fog: false }));
+  fade.renderOrder = 999; camera.add(fade);
+
+  // 画面のままの操作（VR側）
+  var dragging = false, lastX = 0, lastY = 0, moved = 0, holdT = 0, keys = {};
+  canvas.addEventListener("pointerdown", function (e) {
+    startAudio();
+    if (role === "pc") { pcDown(e); return; }
+    if (renderer.xr.isPresenting) return;
+    dragging = true; lastX = e.clientX; lastY = e.clientY; moved = 0; holdT = 0;
+  });
+  window.addEventListener("pointermove", function (e) {
+    if (role === "pc") { pcMove(e); return; }
+    if (!dragging) return;
+    moved += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
+    flatYaw -= (e.clientX - lastX) * 0.005; flatPitch = clamp(flatPitch - (e.clientY - lastY) * 0.004, -1.1, 0.9);
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  window.addEventListener("pointerup", function (e) { if (role === "pc") { pcUp(e); return; } dragging = false; });
+  window.addEventListener("keydown", function (e) {
+    keys[e.code] = true;
+    if (role === "pc") {
+      if (e.code === "Digit1") selectTool("wall");
+      if (e.code === "Digit2") selectTool("pit");
+      if (e.code === "Digit3") selectTool("golem");
+      if (e.code === "Enter" && state && state.phase === "end") { startGame(); hideEnd(); }
+    }
+  });
+  window.addEventListener("keyup", function (e) { keys[e.code] = false; });
+
+  // ================================================================
+  // パソコン側：上から見る、じゃまをする
+  // ================================================================
+  var tool = "wall", mouseNDC = new THREE.Vector2(), raycaster = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  var golemDragging = false;
+  var hoverMark = new THREE.Mesh(new THREE.PlaneGeometry(T * 0.96, T * 0.96), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.45, depthWrite: false }));
+  hoverMark.rotation.x = -Math.PI / 2; hoverMark.position.y = 0.05; hoverMark.visible = false; scene.add(hoverMark);
+  function selectTool(t) {
+    tool = t;
+    Array.prototype.forEach.call(document.querySelectorAll(".tool"), function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-tool") === t ? "true" : "false"); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".tool"), function (b) { b.addEventListener("click", function () { selectTool(b.getAttribute("data-tool")); }); });
+  function groundAt(e) {
+    mouseNDC.set(e.clientX / window.innerWidth * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+    raycaster.setFromCamera(mouseNDC, camera);
+    var p = new THREE.Vector3();
+    return raycaster.ray.intersectPlane(groundPlane, p) ? p : null;
+  }
+  function pcDown(e) {
+    if (!state || state.phase !== "play") return;
+    var p = groundAt(e); if (!p) return;
+    if (tool === "golem") { if (golemHover(p.x, p.z)) golemDragging = true; else tone(160, 0.15, 0.08, "square"); return; }
+    var t = toTile(p.x, p.z);
+    var ok = tool === "wall" ? placeFake(t.x, t.y) : placePit(t.x, t.y);
+    if (!ok) tone(160, 0.15, 0.08, "square"); else tone(700, 0.08, 0.08, "triangle");
+  }
+  function pcMove(e) {
+    var p = groundAt(e); if (!p) return;
+    var t = toTile(p.x, p.z);
+    hoverMark.visible = tool !== "golem" && t.x >= 0 && t.y >= 0 && t.x < N && t.y < N;
+    hoverMark.position.x = tileX(t.x); hoverMark.position.z = tileZ(t.y);
+    hoverMark.material.color.setHex(tool === "pit" ? 0x8a5a2a : 0xffe14a);
+    if (golemDragging && state.golem.mode === "hover") { state.golem.x = p.x; state.golem.z = p.z; }
+  }
+  function pcUp() { if (golemDragging) { golemDragging = false; golemDrop(); } }
+
+  // ================================================================
+  // ひとり用のCPU
+  // ================================================================
+  // VRひとり：CPUがじゃまをする
+  var aiT = 3, aiGolemT = 12;
+  function aiInterfere(dt) {
+    var p = state.player;
+    if (p.respawn > 0) return;
+    aiT -= dt; aiGolemT -= dt;
+    var pt = toTile(p.x, p.z);
+    // 次の鍵（または出口）までの道
+    var target = null;
+    for (var i = 0; i < 3; i++) if (!state.keys[i]) { target = KEY_TILES[i]; break; }
+    if (!target) target = { x: EXIT.x, y: EXIT.y - 1 };
+    var d = bfs(grid, target.x, target.y, function (x, y) { return solidAt(x, y); });
+    var path = [], cur = { x: pt.x, y: pt.y };
+    for (var s = 0; s < 12 && cur; s++) {
+      var best = null, bv = d[cur.y][cur.x];
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (o) { var nx = cur.x + o[0], ny = cur.y + o[1]; if (d[ny] && d[ny][nx] >= 0 && d[ny][nx] < bv) { bv = d[ny][nx]; best = { x: nx, y: ny }; } });
+      if (best) path.push(best); cur = best;
+    }
+    if (aiT <= 0) {
+      aiT = rand(4, 7);
+      if (path.length > 5 && Math.random() < 0.45) { state.points = 99; placePit(path[4].x, path[4].y); }
+      else if (path.length > 3) { state.points = 99; placeFake(path[2].x, path[2].y); }
+    }
+    if (aiGolemT <= 0 && state.golem.mode === "home" && state.golem.cool <= 0 && path.length > 6) {
+      aiGolemT = rand(14, 20);
+      golemHover(tileX(path[6].x), tileZ(path[6].y));
+      setTimeout(function () { if (state.golem.mode === "hover") golemDrop(); }, 1600);
+    }
+  }
+  // パソコンひとり：CPUが迷路を進む
+  var runner = { next: null, pathT: 0, aware: 0.6 };
+  function aiRun(dt) {
+    var p = state.player;
+    if (p.respawn > 0) { if (p.respawn < 0.3) { p.x = tileX(START.x); p.z = tileZ(START.y); } return; }
+    runner.pathT -= dt;
+    var pt = toTile(p.x, p.z);
+    if (runner.pathT <= 0 || !runner.next) {
+      runner.pathT = 0.3;
+      var target = null, bestD = 1e9;
+      var d0 = bfs(grid, pt.x, pt.y, function (x, y) { return solidAt(x, y); });
+      for (var i = 0; i < 3; i++) if (!state.keys[i] && d0[KEY_TILES[i].y][KEY_TILES[i].x] >= 0 && d0[KEY_TILES[i].y][KEY_TILES[i].x] < bestD) { bestD = d0[KEY_TILES[i].y][KEY_TILES[i].x]; target = KEY_TILES[i]; }
+      if (!target && state.keys.every(Boolean)) target = { x: EXIT.x, y: EXIT.y };
+      if (target) {
+        var d = bfs(grid, target.x, target.y, function (x, y) { return solidAt(x, y) && !(x === target.x && y === target.y); });
+        var best = null, bv = d[pt.y][pt.x] >= 0 ? d[pt.y][pt.x] : 1e9;
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (o) { var nx = pt.x + o[0], ny = pt.y + o[1]; if (d[ny] && d[ny][nx] >= 0 && d[ny][nx] < bv) { bv = d[ny][nx]; best = { x: nx, y: ny }; } });
+        runner.next = best || target;
+      }
+    }
+    if (!runner.next) return;
+    var tx = tileX(runner.next.x), tz = tileZ(runner.next.y);
+    // 落とし穴：気づいたら、反対がわを通る
+    var pit = null;
+    state.pits.forEach(function (q) { if (!q.used && q.x === runner.next.x && q.y === runner.next.y) pit = q; });
+    if (pit) {
+      if (pit.noticed === undefined) pit.noticed = Math.random() < runner.aware;
+      if (pit.noticed) { var o = T * 0.3; if (pit.side === "n") tz += o; if (pit.side === "s") tz -= o; if (pit.side === "w") tx += o; if (pit.side === "e") tx -= o; }
+    }
+    var dx = tx - p.x, dz = tz - p.z, dd = Math.sqrt(dx * dx + dz * dz) || 1;
+    var sp = WALK * 0.9;
+    var np = { x: p.x + dx / dd * sp * dt, z: p.z + dz / dd * sp * dt };
+    collide(np, PLAYER_R);
+    p.x = np.x; p.z = np.z; p.yaw = Math.atan2(-dx, -dz);
+    if (dd < 0.3) runner.pathT = 0;
+  }
+
+  // ================================================================
+  // 画面の文字
+  // ================================================================
+  var endCanvas = document.createElement("canvas"); endCanvas.width = 1024; endCanvas.height = 256;
+  var endTex = new THREE.CanvasTexture(endCanvas);
+  var endMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), new THREE.MeshBasicMaterial({ map: endTex, transparent: true, depthTest: false, fog: false }));
+  endMesh.renderOrder = 998; endMesh.visible = false; scene.add(endMesh);
+  var endInfo = { text: "", sub: "", color: "#000" };
+  function showEnd(text, color, sub) {
+    var el = $("endMsg"); el.innerHTML = "";
+    var a = document.createElement("div"); a.textContent = text; el.appendChild(a);
+    var b = document.createElement("div"); b.style.fontSize = "1.05rem"; b.style.fontFamily = "var(--font-body)"; b.textContent = sub; el.appendChild(b);
+    el.style.color = color; el.hidden = false;
+    endInfo = { text: text, sub: sub, color: color }; drawEnd(0);
+  }
+  function hideEnd() { $("endMsg").hidden = true; endMesh.visible = false; }
+  function drawEnd(k) {
+    if (!(role === "vr" || role === "solo")) return;
+    var g = endCanvas.getContext("2d"); g.clearRect(0, 0, 1024, 256); g.textAlign = "center";
+    g.font = "120px 'Dela Gothic One', sans-serif"; g.lineWidth = 12; g.strokeStyle = "rgba(255,255,255,0.9)"; g.strokeText(endInfo.text, 512, 140);
+    g.fillStyle = endInfo.color; g.fillText(endInfo.text, 512, 140);
+    g.font = "bold 40px 'Zen Kaku Gothic New', sans-serif"; g.lineWidth = 8; g.strokeText(endInfo.sub, 512, 205); g.fillStyle = "#233024"; g.fillText(endInfo.sub, 512, 205);
+    g.fillStyle = "rgba(0,0,0,0.12)"; g.fillRect(312, 228, 400, 12); g.fillStyle = "#3f8a3a"; g.fillRect(312, 228, 400 * k, 12);
+    endTex.needsUpdate = true;
+    var q = new THREE.Quaternion(); camera.getWorldQuaternion(q);
+    var dir = new THREE.Vector3(0, 0, -1).applyQuaternion(q); dir.y = 0; dir.normalize();
+    var cp = camera.getWorldPosition(new THREE.Vector3());
+    endMesh.position.set(cp.x + dir.x * 3, cp.y + 0.2, cp.z + dir.z * 3); endMesh.lookAt(cp.x, cp.y + 0.2, cp.z);
+    endMesh.visible = true;
+  }
+
+  // ================================================================
+  // 1コマごとの処理
+  // ================================================================
+  var clock = new THREE.Clock(), restartHold = 0, lastBarQ = -1;
+  function tick() {
+    var dt = Math.min(clock.getDelta(), 0.05);
+    var now = performance.now() / 1000;
+    var inXR = renderer.xr.isPresenting;
+    var vrSide = role === "vr" || role === "solo";
+
+    // VR側：歩く
+    if (vrSide) {
+      if (!inXR) {
+        camera.rotation.set(flatPitch, flatYaw, 0);
+        walking = (dragging && moved < 8 && holdT > 0.15) || keys.KeyW || keys.ArrowUp;
+        if (dragging) holdT += dt;
+      }
+      var yaw = vrMove(dt, now);
+      var sx = 0, sz = 0;
+      if (shakeT > 0) { shakeT -= dt; sx = (Math.random() - 0.5) * shakeT * 0.15; sz = (Math.random() - 0.5) * shakeT * 0.15; }
+      rig.position.set(me.x + sx, inXR ? me.y : me.y - EYE, me.z + sz);
+      if (!inXR) camera.position.set(0, EYE, 0);
+      netT += dt;
+      if (role === "vr" && netT > NET_RATE && conn && conn.open) { netT = 0; conn.send({ t: "p", x: +me.x.toFixed(2), z: +me.z.toFixed(2), yaw: +yaw.toFixed(2) }); }
+      if (role === "solo" && state.player.respawn <= 0) { state.player.x = me.x; state.player.z = me.z; state.player.yaw = yaw; }
+      var tm = role === "solo" ? state.time : remote.time, ks = role === "solo" ? state.keys : remote.keys;
+      drawWatch(tm, ks);
+      // 終わったあと：長押しでもう一度
+      var ended = role === "solo" ? state.phase === "end" : remote.phase === "end";
+      var pressing = inXR ? walking : (dragging && moved < 8);
+      if (ended && pressing) {
+        restartHold += dt;
+        if (restartHold > 1.3) {
+          restartHold = 0; walking = false; dragging = false;
+          tone(660, 0.15, 0.12, "triangle"); tone(990, 0.2, 0.1, "triangle", 0.1);
+          if (role === "solo") { startGame(); } else if (conn && conn.open) conn.send({ t: "restart" });
+        }
+      } else restartHold = 0;
+      if (ended) { var bq = Math.round(restartHold / 1.3 * 20); if (bq !== lastBarQ) { lastBarQ = bq; drawEnd(restartHold / 1.3); } }
+      if (!inXR && !$("flatHint").hidden) $("flatHint").textContent = ended ? "押しつづけて、もう一度" : "ドラッグで見回す ・ 押しっぱなし（または W）で歩く";
+    }
+
+    // 計算（パソコン側、ひとり用）
+    if (role === "pc" || role === "solo") {
+      if (role === "solo") aiInterfere(dt);
+      if (role === "pc" && pcSolo) aiRun(dt);
+      stepState(dt, now);
+      var evs = state.events; state.events = [];
+      netT += dt;
+      if (role === "pc" && conn) { state.events = evs; if (netT > NET_RATE) { netT = 0; sendState(); state.events = []; evs.forEach(handleEvent); } else { /* まとめて送る */ } }
+      else evs.forEach(handleEvent);
+      syncPits(state.pits);
+    } else if (role === "vr") {
+      syncPits(remote.pits);
+    }
+
+    // ゴーレムを画面に
+    var G = role === "vr" ? remote.golem : (state ? state.golem : null);
+    if (G) {
+      var gm = G.m || G.mode;
+      golem.visible = gm !== "home";
+      golemShadow.visible = gm === "hover" || gm === "fall";
+      if (golem.visible) {
+        golem.position.x += (G.x - golem.position.x) * (role === "vr" ? Math.min(1, dt * 12) : 1);
+        golem.position.z += (G.z - golem.position.z) * (role === "vr" ? Math.min(1, dt * 12) : 1);
+        golem.position.y = G.y;
+        if (gm === "hover") golem.position.y = G.y + Math.sin(now * 2) * 0.5;
+        golem.rotation.y = gm === "chase" ? (G.r !== undefined ? G.r : G.rot || 0) : golem.rotation.y + dt * 0.5;
+        var walkA = gm === "chase" ? Math.sin(now * 6) * 0.3 : 0;
+        golem.userData.arm1.rotation.x = walkA; golem.userData["arm-1"].rotation.x = -walkA;
+        golem.rotation.z = gm === "stun" ? Math.sin(now * 20) * 0.05 : 0;
+        golemShadow.position.x = golem.position.x; golemShadow.position.z = golem.position.z;
+        golemShadow.scale.setScalar(gm === "fall" ? 1 + (1 - Math.min(1, golem.position.y / 18)) * 0.5 : 0.8);
+      }
+    }
+    // 門
+    if (gateDoor && gateDoor.userData.open && gateDoor.position.y > -WALL_H) gateDoor.position.y -= dt * 2;
+    // 鍵がくるくる回る
+    keyMeshes.forEach(function (k, i) { k.rotation.y += dt * 1.5; k.position.y = 1.35 + Math.sin(now * 2 + i) * 0.08; });
+    var ksNow = role === "vr" ? remote.keys : (state ? state.keys : null);
+    if (ksNow) keyMeshes.forEach(function (k, i) { if (ksNow[i]) k.visible = false; });
+    clouds.forEach(function (c) { c.s.position.x += c.sp * dt; if (c.s.position.x > 220) c.s.position.x = -220; });
+    updateFx(dt);
+    updateMusic(dt);
+
+    if (role === "pc") pcView(dt);
+    renderer.render(scene, camera);
+  }
+  var pcSolo = false;
+  function pcView(dt) {
+    // 迷路全体を、ななめ上から見下ろす
+    var span = N * T * 1.08;
+    var half = Math.tan(camera.fov * Math.PI / 360);
+    var d = Math.max(span / 2 / half, span / 2 / (half * camera.aspect)) * 1.08;
+    camera.position.set(0, d * 0.95, d * 0.3);
+    camera.lookAt(0, 0, 1.5);
+    var p = state.player;
+    avatar.visible = true;
+    avatar.position.set(p.x, p.respawn > 0 ? Math.max(0, (p.respawn - 0.3) * 4) : 0, p.z);
+    avatar.rotation.y = p.yaw;
+    var tt = Math.max(0, Math.ceil(state.time));
+    $("pcTime").textContent = "のこり " + Math.floor(tt / 60) + ":" + ((tt % 60) < 10 ? "0" : "") + (tt % 60);
+    $("pcKeys").textContent = "鍵 " + state.keys.filter(Boolean).length + "/3";
+    $("pcPts").textContent = "ポイント " + state.points;
+    var g = state.golem;
+    $("pcGolem").textContent = g.mode === "home" ? (g.cool > 0 ? "ゴーレム あと" + Math.ceil(g.cool) + "秒" : "ゴーレム OK") : (g.mode === "chase" ? "ゴーレム 追跡中" : "ゴーレム 出動中");
+  }
+
+  function onResize() {
+    if (renderer.xr.isPresenting) return;
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+  window.addEventListener("resize", onResize);
+
+  // ================================================================
+  // はじめ方
+  // ================================================================
+  function newSeed() { return Math.floor(Math.random() * 1e9); }
+  $("btnBack").addEventListener("click", function () { try { var s = renderer.xr.getSession(); if (s) s.end(); } catch (e) {} location.reload(); });
+  $("btnRolePC").addEventListener("click", function () {
+    startAudio(); role = "pc"; $("btnBack").hidden = false;
+    state = newState(newSeed()); makeMaze(state.seed); buildMaze();
+    $("cardMain").hidden = true; $("cardHost").hidden = false;
+    hostSetup();
+  });
+  $("btnStart").addEventListener("click", function () {
+    startAudio();
+    $("overlay").hidden = true; $("pcHud").hidden = false;
+    startGame();
+  });
+  $("btnPcSolo").addEventListener("click", function () {
+    startAudio(); role = "pc"; pcSolo = true; $("btnBack").hidden = false;
+    state = newState(newSeed()); makeMaze(state.seed); buildMaze();
+    $("overlay").hidden = true; $("pcHud").hidden = false;
+    startGame();
+  });
+  $("btnRoleVR").addEventListener("click", function () {
+    startAudio(); role = "vr"; $("btnBack").hidden = false;
+    $("cardMain").hidden = true; $("cardJoin").hidden = false;
+  });
+  $("btnSolo").addEventListener("click", function () {
+    startAudio(); role = "solo"; $("btnBack").hidden = false;
+    state = newState(newSeed()); makeMaze(state.seed); buildMaze(); localPlayerToStart();
+    $("cardMain").hidden = true; $("cardEnter").hidden = false;
+    $("enterEyebrow").textContent = "ひとりで遊ぶ";
+    $("enterText").textContent = "CPUがにせの壁・落とし穴・ゴーレムでじゃまをしてきます。鍵を3つ集めて、出口から出よう。";
+  });
+  var keypad = $("keypad");
+  ["1", "2", "3", "4", "5", "6", "7", "8", "9", "けす", "0", "←"].forEach(function (k) {
+    var b = document.createElement("button"); b.type = "button"; b.textContent = k;
+    b.addEventListener("click", function () {
+      var v = $("codeInput").value;
+      if (k === "けす") v = ""; else if (k === "←") v = v.slice(0, -1); else if (v.length < 4) v += k;
+      $("codeInput").value = v;
+      if (v.length === 4) tryConnect();
+    });
+    keypad.appendChild(b);
+  });
+  $("codeInput").addEventListener("input", function () { if ($("codeInput").value.replace(/\D/g, "").length === 4) tryConnect(); });
+  function tryConnect() {
+    if (connecting) return;
+    var code = $("codeInput").value.replace(/\D/g, "");
+    if (code.length !== 4) { $("status2").textContent = "4けたの数字を入れてください"; return; }
+    connecting = true; setTimeout(function () { connecting = false; }, 16000);
+    joinSetup(code);
+  }
+  $("btnConnect").addEventListener("click", tryConnect);
+  function beginSolo() { if (role === "solo") startGame(); }
+  $("btnEnterVR").addEventListener("click", function () {
+    startAudio();
+    if (!navigator.xr) return;
+    navigator.xr.requestSession("immersive-vr").then(function (session) {
+      session.addEventListener("end", function () { $("overlay").hidden = false; onResize(); });
+      return renderer.xr.setSession(session).then(function () { camera.position.set(0, 0, 0); $("overlay").hidden = true; beginSolo(); });
+    }).catch(function (err) { $("enterText").textContent = "VRに入れませんでした（" + (err && err.message ? err.message : err) + "）"; });
+  });
+  $("btnEnterFlat").addEventListener("click", function () {
+    startAudio(); $("overlay").hidden = true; $("flatHint").hidden = false;
+    camera.position.set(0, EYE, 0); beginSolo();
+  });
+  if (navigator.xr && navigator.xr.isSessionSupported) {
+    navigator.xr.isSessionSupported("immersive-vr").then(function (ok) {
+      $("btnEnterVR").disabled = !ok;
+      $("note").textContent = ok ? "VRが使えます。" : "このブラウザではVRが使えません（画面のままで試せます）。";
+    }).catch(function () { $("btnEnterVR").disabled = true; $("note").textContent = "このブラウザではVRが使えません（画面のままで試せます）。"; });
+  } else { $("btnEnterVR").disabled = true; $("note").textContent = "このブラウザではVRが使えません（画面のままで試せます）。"; }
+
+  // 最初の画面のうしろ：迷路をななめ上から、ゆっくり回して見せる
+  makeMaze(12345); buildMaze();
+  renderer.setAnimationLoop(function () {
+    if (!role) {
+      var t = performance.now() / 1000 * 0.06;
+      camera.position.set(Math.sin(t) * 55, 38, Math.cos(t) * 55); camera.lookAt(0, 0, 0);
+    }
+    tick();
+  });
+})();
+</script>
+</body>
+</html>
