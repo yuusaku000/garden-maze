@@ -99,7 +99,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     <button class="tool" data-tool="wall" aria-pressed="true">1 にせの壁（1pt・8秒で消える）</button>
     <button class="tool" data-tool="pit" aria-pressed="false">2 落とし穴（2pt・同時に4個まで）</button>
     <button class="tool" data-tool="golem" aria-pressed="false">3 ゴーレム（使うと25秒待ち）</button>
-    <button class="tool" id="btnTrick">4 矢印いたずら（3pt・10秒・その後20秒待ち）</button>
+    <button class="tool" id="btnTrick">4 矢印いたずら（2pt・10秒・その後20秒待ち）</button>
     <button class="tool" id="btnTurn">R 見る向きを回す</button>
   </div>
 </div>
@@ -175,7 +175,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   var GAME_TIME = 300;
   var START_POINTS = 3, POINT_EVERY = 12, POINT_MAX = 10;
   var WALL_COST = 1, PIT_COST = 2, FAKE_LIFE = 8, MAX_PITS = 4;
-  var ARROW_COST = 3, ARROW_FAKE_TIME = 10, ARROW_COOL = 20;   // 矢印いたずら
+  var ARROW_COST = 2, ARROW_FAKE_TIME = 10, ARROW_COOL = 20;   // 矢印いたずら
   var CHECK_EVERY = 20;        // 足あとの「○秒前」の印を置く間かく
   var GOLEM_COOL = 25, GOLEM_STUN = 2, GOLEM_LOSE = 3;
   var PREFIX = "yu-gardenmaze-";
@@ -1874,14 +1874,23 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     updateMusic(dt);
 
     if (role === "pc") pcView(dt);
+    else if (camera.view && camera.view.enabled) { camera.clearViewOffset(); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); }
     renderer.render(scene, camera);
   }
   var pcSolo = false;
   function pcView(dt) {
+    // 上の表示と下のボタンのあいだに、迷路がおさまるようにする
+    var W = window.innerWidth, H = window.innerHeight;
+    var topH = Math.min(H * 0.3, $("pcTop").getBoundingClientRect().bottom + 6);
+    var botH = Math.min(H * 0.4, H - $("pcBottom").getBoundingClientRect().top + 14);
+    var availH = Math.max(120, H - topH - botH);
+    camera.aspect = W / availH;
+    camera.setViewOffset(W, availH, 0, -topH, W, H);
+    camera.updateProjectionMatrix();
     // 迷路全体を、ななめ上から見下ろす
     var span = N * T * 1.08;
     var half = Math.tan(camera.fov * Math.PI / 360);
-    var d = Math.max(span / 2 / half, span / 2 / (half * camera.aspect)) * 1.08;
+    var d = Math.max(span / 2 / half, span / 2 / (half * camera.aspect)) * 1.16;
     d *= pcZoom;
     // 4方向から見られる（R で90°ずつ回す。なめらかに回る）
     var target = viewTurn * Math.PI / 2;
