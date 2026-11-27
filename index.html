@@ -966,7 +966,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
       var r2 = cache[j.x + "," + j.y] || bestStep(j, ks);
       if (!r2.step) { j.marker.visible = false; return; }
       j.marker.visible = role === "pc";
-      j.marker.rotation.z = Math.atan2(-r2.step[0], -r2.step[1]) + Math.PI;
+      j.marker.rotation.z = Math.atan2(-r2.step[0], -r2.step[1]);
       j.marker.material.color.setHex(trick ? 0xc040ff : (r2.toExit ? 0x9fe0ff : 0x2ad0ff));
     });
   }
