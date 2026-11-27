@@ -1688,11 +1688,11 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   // パソコンひとり：CPUが迷路を進む
   // 鍵の場所は最初は知らない。見えたら覚える。分かれ道の看板の矢印にしたがう。
   // 通ったところは覚えていて（床の線）、まだ行っていない道を優先して探す。
-  var runner = null;
+  var runner = null, RUNNER_SMART = true;     // true：ゴーレムのいるあたりを、まわり道でさける
   function runnerReset() {
     var v = [], sn = []; for (var y = 0; y < N; y++) { v.push([]); sn.push([]); for (var x = 0; x < N; x++) { v[y].push(0); sn[y].push(0); } }
     runner = { next: null, from: null, aware: 0.6, visit: v, seen: sn, known: [false, false, false], exitKnown: false, goal: null,
-      signUsed: {}, follow: false, blockT: 0, stuckT: 0, lastD: 0, stats: { smash: 0 } };
+      signUsed: {}, follow: false, blockT: 0, stuckT: 0, lastD: 0, avoid: null, mode: "", stats: { smash: 0, flee: 0, wait: 0 } };
   }
   function runnerSees(p, x, z) { return Math.hypot(x - p.x, z - p.z) < 16 && lineOfSight(p.x, p.z, x, z); }
   function openTile(x, y) { return x >= 0 && y >= 0 && x < N && y < N && grid[y][x] === 0; }
@@ -1711,10 +1711,16 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     // 気づいている落とし穴のマスは、できればさける
     var pitT = {};
     state.pits.forEach(function (q) { if (!q.used && q.noticed) { var qt = toTile(q.x, q.z); pitT[qt.x + "," + qt.y] = true; } });
-    var blk = function (x, y) { return gateShut(x, y) || !!pitT[x + "," + y]; };
+    // ゴーレムを見た場所のまわり（3マス以内）は、しばらく通らない
+    var gm = state.golem, avoidD = null;
+    if (gm.mode !== "chase" && gm.mode !== "stun") r.avoid = null;
+    if (RUNNER_SMART && r.avoid) avoidD = bfs(grid, r.avoid.x, r.avoid.y, null);
+    var blk = function (x, y) { return gateShut(x, y) || !!pitT[x + "," + y] || (avoidD && avoidD[y][x] >= 0 && avoidD[y][x] <= 3); };
+    r.mode = "";
     // 0) ゴーレムが見えたら、遠ざかる方へにげる（ゴーレムは歩くのがおそい）
-    var gm = state.golem;
-    if ((gm.mode === "chase" || gm.mode === "stun") && runnerSees(p, gm.x, gm.z)) {
+    var seeG = (gm.mode === "chase" || gm.mode === "stun") && runnerSees(p, gm.x, gm.z);
+    if (seeG) { var gt0 = toTile(gm.x, gm.z); r.avoid = { x: gt0.x, y: gt0.y }; }
+    if (seeG && (!RUNNER_SMART || Math.hypot(gm.x - p.x, gm.z - p.z) < 9)) {
       var gtile = toTile(gm.x, gm.z), dg = bfs(grid, gtile.x, gtile.y, gateShut);
       var here = dg[pt.y][pt.x] >= 0 ? dg[pt.y][pt.x] : 99, flee = null, fv = -1;
       DIRS.forEach(function (o) {
@@ -1724,7 +1730,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
         var v2 = (dg[ny][nx] >= 0 ? dg[ny][nx] : 99) + (r.seen[ny][nx] ? 0 : 0.5) + Math.random() * 0.3;
         if (v2 > fv) { fv = v2; flee = { x: nx, y: ny }; }
       });
-      if (flee && fv > here) { r.goal = null; r.follow = false; return flee; }
+      if (flee && fv > here) { r.goal = null; r.follow = false; r.mode = "flee"; return flee; }
     }
     // 1) 行き先が分かっていれば、そこへ（にせの壁はハンマーでこわすので、通れるものとして考える）
     var target = null;
@@ -1776,6 +1782,8 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   // 落とし穴をさけた道があればそれを、なければ（落ちるのを覚悟で）ふつうの道を
   function routeTo(goal, pt, blk, gs) {
     var st = stepDown(bfs(grid, goal.x, goal.y, blk), pt);
+    // まわり道がないときは、ゴーレムがいなくなるまで待つ
+    if ((!st || (st.x === pt.x && st.y === pt.y)) && RUNNER_SMART && runner.avoid) { runner.mode = "wait"; return { x: pt.x, y: pt.y }; }
     if (!st || (st.x === pt.x && st.y === pt.y)) st = stepDown(bfs(grid, goal.x, goal.y, gs), pt);
     return st;
   }
@@ -1820,6 +1828,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     runner.stuckT = Math.abs(dist - runner.lastD) < 0.01 && runner.blockT === 0 ? runner.stuckT + dt : 0;
     runner.lastD = dist;
     if (runner.stuckT > 1.5) { runner.stuckT = 0; runner.next = null; }
+    if (runner.mode === "flee") runner.stats.flee += dt; else if (runner.mode === "wait") runner.stats.wait += dt;
   }
 
   // ================================================================
